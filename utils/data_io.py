@@ -138,7 +138,7 @@ def convert_format(data: dict) -> dict:
         if r_test.ndim == 2:
             converted["responses_test"] = r_test.T.astype(np.float32)  # [T, N] → [N, T]
         elif r_test.ndim == 3:
-            converted["responses_test_by_trial"] = np.transpose(r_test, (1, 0, 2)).astype(np.float32)  # [trial, T, N] → [T, trial, N]
+            converted["responses_test_by_trial"] = np.transpose(r_test, (1, 2, 0)).astype(np.float32)  # [trial, T, N] → [T, N, trial]
             converted["responses_test"] = np.mean(r_test, axis=0).T.astype(np.float32)  # [T, N] → [N, T](trial-avg)
         else:
             raise ValueError("Unsupported test response shape.")

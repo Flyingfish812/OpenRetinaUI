@@ -91,18 +91,18 @@ def build_train_ui():
         gr.Markdown("# Training Settings")
 
         with gr.Row():
-            monitor = gr.Textbox(label="Monitor Choice", value="val_correlation")
-            mode = gr.Dropdown(choices=["max", "min"], value="max", label="Optimization Mode")
+            monitor = gr.Textbox(label="Monitor Choice", value="val_loss")
+            mode = gr.Dropdown(choices=["max", "min"], value="min", label="Optimization Mode")
             interval = gr.Dropdown(choices=["epoch", "step"], value="epoch", label="Learning Rate Monitor Interval")
 
         with gr.Row():
             patience = gr.Slider(1, 20, value=10, step=1, label="Early Stopping Patience")
-            min_delta = gr.Number(value=0.001, label="Early Stopping min_delta")
+            min_delta = gr.Number(value=0.0001, label="Early Stopping min_delta")
             verbose = gr.Checkbox(value=False, label="Logs")
 
         with gr.Row():
             save_weights_only = gr.Checkbox(value=False, label="Weights Only")
-            max_epochs = gr.Slider(1, 200, value=10, step=1, label="Max Epochs")
+            max_epochs = gr.Slider(1, 300, value=200, step=1, label="Max Epochs")
 
         with gr.Column():
             input_2d = gr.Checkbox(label="Use 2D Input", value=False)

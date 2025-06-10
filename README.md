@@ -11,3 +11,7 @@ We do not offer dataset for confidential reasons. But you can adapt the code to 
 ## Version 0.1.0
 
 Initial commit
+
+## Version 0.1.1
+
+Visualizer page added
