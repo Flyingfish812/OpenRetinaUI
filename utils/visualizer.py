@@ -31,7 +31,7 @@ def calculate_reliability(data, axis=2):
 
 #2. Bootstrapped reliability estimate:
 
-def bootstrap_reliability(data, n_bootstrap=1000, axis=2):
+def bootstrap_reliability(data, n_bootstrap=100, axis=2):
     """
     Calculate reliability using bootstrap sampling.
     data shape: (time, neuron, repetitions)

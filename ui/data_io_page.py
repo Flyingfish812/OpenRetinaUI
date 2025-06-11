@@ -67,7 +67,7 @@ def step_convert_format():
         info.append(f"Validation size: {converted['images_val'].shape}")
         info.append(f"Validation responses size: {converted['responses_val'].shape}")
         info.append(f"Test size: {converted['images_test'].shape}")
-        info.append(f"Test responses size: {converted['responses_test'].shape}")
+        # info.append(f"Test responses size: {converted['responses_test'].shape}")
         info.append(f"Test responses with trail: {converted.get('responses_test_by_trial', None).shape}")
         info.append("✅ 格式转换成功")
         return append_log_dataio("\n".join(info))

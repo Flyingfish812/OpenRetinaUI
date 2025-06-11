@@ -188,7 +188,7 @@ class KlindtReadoutWrapper2D(Readout):
                     std=std,
                     size=(num_kernels[-1], num_neurons)  # We will infer input channel count at first forward
                 ),
-                requires_grad=True
+                # requires_grad=True
             )
 
         self.bias = nn.Parameter(torch.zeros(num_neurons)) if final_relu else None

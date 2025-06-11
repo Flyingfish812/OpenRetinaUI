@@ -57,7 +57,8 @@ def start_tensorboard(logdir=LOG_SAVE_DIR, port=6006):
     time.sleep(2)  # 稍作等待确保启动成功
 
 
-def trigger_train(monitor, input_2d, train_name, patience, mode, verbose, min_delta, interval, save_weights_only, max_epochs):
+def trigger_train(monitor, input_2d, train_name, patience, mode, verbose, min_delta, interval, save_weights_only, max_epochs,
+                  sr_factor, sr_patience, sr_threshold, sr_startlr, sr_minlr):
     try:
         logger = create_logger(LOG_SAVE_DIR, train_name)
         early_stopping = create_early_stopping(monitor, patience, mode, verbose, min_delta)
@@ -77,11 +78,12 @@ def trigger_train(monitor, input_2d, train_name, patience, mode, verbose, min_de
         train_loader = LongCycler(dataloader["train"])
         val_loader = ShortCycler(dataloader["validation"])
         model = global_state["model"]
+        model.configure_optimizers = lambda: configure_external_optimizers(model, sr_factor, sr_patience, sr_threshold, sr_startlr, sr_minlr)
 
         global_state["training_logs"] = []
         trainer.fit(model, train_loader, val_loader)
 
-        return "\n✅ Model trained successfully"
+        return "✅ Model trained successfully"
     except Exception as e:
         return f"❌ Training failed: {str(e)}"
 
@@ -89,6 +91,8 @@ def trigger_train(monitor, input_2d, train_name, patience, mode, verbose, min_de
 def build_train_ui():
     with gr.Blocks() as train_page:
         gr.Markdown("# Training Settings")
+        gr.Markdown("## Callbacks")
+        gr.Markdown("Parameters for training callbacks: Early stopping, learning rate monitor, model checkpoint.")
 
         with gr.Row():
             monitor = gr.Textbox(label="Monitor Choice", value="val_loss")
@@ -96,13 +100,27 @@ def build_train_ui():
             interval = gr.Dropdown(choices=["epoch", "step"], value="epoch", label="Learning Rate Monitor Interval")
 
         with gr.Row():
-            patience = gr.Slider(1, 20, value=10, step=1, label="Early Stopping Patience")
+            patience = gr.Slider(1, 20, value=15, step=1, label="Early Stopping Patience")
             min_delta = gr.Number(value=0.0001, label="Early Stopping min_delta")
             verbose = gr.Checkbox(value=False, label="Logs")
 
         with gr.Row():
             save_weights_only = gr.Checkbox(value=False, label="Weights Only")
             max_epochs = gr.Slider(1, 300, value=200, step=1, label="Max Epochs")
+        
+        gr.Markdown("## Optimizer and Scheduler")
+        gr.Markdown("Parameters for optimizer and scheduler.")
+
+        with gr.Row():
+            sr_factor = gr.Slider(0.1, 1.0, value=0.5, step=0.1, label="Scheduler Reduce Factor")
+            sr_patience = gr.Slider(1, 30, value=25, step=1, label="Scheduler Patience")
+        
+        with gr.Row():
+            sr_threshold = gr.Number(value=0.0005, label="Scheduler Threshold")
+            sr_startlr = gr.Number(value=1e-4, label="Optimizer Start Learning Rate")
+            sr_minlr = gr.Number(value=1e-6, label="Scheduler Min Learning Rate")
+
+        gr.Markdown("## Materials Check and Training Session")
 
         with gr.Column():
             input_2d = gr.Checkbox(label="Use 2D Input", value=False)
@@ -118,13 +136,14 @@ def build_train_ui():
             train_name = gr.Textbox(label="Run Name (for TensorBoard)", placeholder="e.g., my_run_001")
             train_btn = gr.Button("Fit Model")
         
-        output_log = gr.Textbox(label="Train log", lines=10, max_lines=10, interactive=False)
+        output_log = gr.Textbox(label="Train log", lines=5, max_lines=5, interactive=False)
         timer = gr.Timer(value=1.0, active=False)
         timer.tick(fn=update_log_display, outputs=output_log)
 
         train_btn.click(
             fn=trigger_train,
-            inputs=[monitor, input_2d, train_name, patience, mode, verbose, min_delta, interval, save_weights_only, max_epochs],
+            inputs=[monitor, input_2d, train_name, patience, mode, verbose, min_delta, interval, save_weights_only, max_epochs,
+                    sr_factor, sr_patience, sr_threshold, sr_startlr, sr_minlr],
             outputs=output_log,
             show_progress=True
         )

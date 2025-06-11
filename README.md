@@ -10,8 +10,18 @@ We do not offer dataset for confidential reasons. But you can adapt the code to 
 
 ## Version 0.1.0
 
+- 2025/06/09
+
 Initial commit
 
 ## Version 0.1.1
 
+- 2025/06/10
+
 Visualizer page added
+
+## Version 0.1.2
+
+- 2025/06/11
+
+Add optimizer and scheduler settings, fixed data normalization methods.

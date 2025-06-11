@@ -1,4 +1,5 @@
 import os
+import torch
 import datetime
 from ui.global_settings import LOG_SAVE_DIR, global_state
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -14,7 +15,7 @@ def create_logger(log_dir: str, run_name: str | None = None) -> TensorBoardLogge
         name=run_name  # 这会在 log_dir/run_name 下保存日志
     )
 
-    print(f"📁 日志保存目录: {os.path.join(log_dir, run_name)}")
+    print(f"日志保存目录: {os.path.join(log_dir, run_name)}")
     return logger
 
 def get_tensorboard_url(port=6006):
@@ -40,3 +41,23 @@ def create_checkpoint(monitor, mode, save_weights_only):
         mode=mode,
         save_weights_only=save_weights_only
     )
+
+def configure_external_optimizers(model, factor = 0.5, patience = 25, threshold = 0.0005, start_lr = 1e-4, min_lr = 1e-6):
+    optimizer = torch.optim.AdamW(model.parameters(), lr=start_lr, weight_decay=1e-4)
+
+    scheduler = {
+        "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            factor=factor,
+            patience=patience,
+            threshold=threshold,
+            threshold_mode="abs",
+            min_lr=min_lr,
+        ),
+        "monitor": "val_loss",
+        "interval": "epoch",
+        "frequency": 1
+    }
+
+    return {"optimizer": optimizer, "lr_scheduler": scheduler}
