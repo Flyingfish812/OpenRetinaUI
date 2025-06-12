@@ -79,30 +79,30 @@ def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: boo
 
     for session_name, test_loader in dataloader_dict.items():
         for data_point in test_loader:
-            inputs = data_point.inputs  # shape depends on 2D/3D
-            targets = data_point.targets  # shape: [num_neurons]
-
-            if is_2d:
-                # inputs: [C, H, W] → [1, C, H, W]
-                input_tensor = inputs.to(device)
-            else:
-                # inputs: [C, B, H, W] → [B, C, H, W]
-                input_tensor = inputs.permute(1, 0, 2, 3).to(device)
+            inputs = data_point.inputs.to(device)  # 2d: [B, C, H, W]; 3d: [1, C, T, H, W]
+            targets = data_point.targets  # 2d: [B, num_neurons]; 3d: [1, T, num_neurons]
 
             with torch.no_grad():
-                preds = model(input_tensor).cpu()  # shape: [B, N] or [1, N]
+                preds = model(inputs).cpu()  # shape: [B, N] or [1, T, N]
+            
+            print(inputs.shape, targets.shape, preds.shape)
 
-            if preds.ndim == 1:
-                preds = preds.unsqueeze(0)
-            if targets.ndim == 1:
-                targets = targets.unsqueeze(0)
+            # [1, T, N] -> [T, N]
+            if not is_2d:
+                preds = preds.squeeze(0)
+                targets = targets.squeeze(0)
 
-            all_preds.append(preds)    # shape: [B, N]
-            all_targets.append(targets)  # shape: [B, N]
+            # shape: [B, N] or [T, N]
+            all_preds.append(preds)
+            all_targets.append(targets)  
 
     # Concatenate along batch axis
-    predictions = torch.cat(all_preds, dim=0).numpy()    # [total_samples, N]
-    targets = torch.cat(all_targets, dim=0).numpy()      # [total_samples, N]
+    if is_2d:
+        predictions = torch.cat(all_preds, dim=0).numpy()    # [B, N] -> [total_samples, N]
+        targets = torch.cat(all_targets, dim=0).numpy()      # [B, N] -> [total_samples, N]
+    else:
+        predictions = all_preds[0].numpy()    # [T, N]
+        targets = all_targets[0].numpy()      # [T, N]
 
     # Compatibility, response_data = (stimuli, neurons, trials)
     reliability, reliability_ci = bootstrap_reliability(response_data, axis=2)

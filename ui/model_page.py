@@ -8,17 +8,15 @@ from typing import get_type_hints
 from ui.global_settings import global_state, MODEL_SAVE_DIR
 from utils.model3d import *
 from utils.model import *
+from openretina.models.core_readout import CoreReadout
 
 MAX_PARAMS = 50
 
 # 可选模型注册表
 available_models = {
-    "KlindtCoreReadout3D": KlindtCoreReadout3D,
-    "KlindtCoreReadout2D": KlindtCoreReadout2D,
-}
-values_dict = {
-    "correlation_loss": ["CorrelationLoss2D()"],
-    "loss": ["nn.PoissonNLLLoss(log_input = False)"],
+    "Klindt Core Readout 3D": KlindtCoreReadout3D,
+    "Klindt Core Readout 2D": KlindtCoreReadout2D,
+    "(Open Retina Default) Core Readout": CoreReadout,
 }
 
 log_messages_model = []
@@ -91,21 +89,21 @@ def render_param_fields(model_name, param_container, input_widgets, input_compon
     return updates
 
 def trigger_build_model(*args, model_name, input_widgets):
-    try:
-        model_class = available_models[model_name]
-        append_log_model(f"Model name: {model_name}, Model class: {model_class}")
-        params = extract_model_init_params(model_class)
-        typed_kwargs = {
-            name: cast_value(value, ptype)
-            for (name, ptype, _), value in zip(params, args)
-        }
-        append_log_model(f"\nBuilding models with following parameters: \n{typed_kwargs}")
-        model = model_class(**typed_kwargs)
-        global_state["model"] = model
-        global_state["model_settings"] = {"name": model_name, "args": typed_kwargs}
-        return append_log_model(f"\n✅ Model successfully built: \n{model}")
-    except Exception as e:
-        return append_log_model(f"\n❌ Fail to build model: {str(e)}")
+    # try:
+    model_class = available_models[model_name]
+    append_log_model(f"Model name: {model_name}, Model class: {model_class}")
+    params = extract_model_init_params(model_class)
+    typed_kwargs = {
+        name: cast_value(value, ptype)
+        for (name, ptype, _), value in zip(params, args)
+    }
+    append_log_model(f"\nBuilding models with following parameters: \n{typed_kwargs}")
+    model = model_class(**typed_kwargs)
+    global_state["model"] = model
+    global_state["model_settings"] = {"name": model_name, "args": typed_kwargs}
+    return append_log_model(f"\n✅ Model successfully built: \n{model}")
+    # except Exception as e:
+        # return append_log_model(f"\n❌ Fail to build model: {str(e)}")
 
 def fallback_representer(dumper, data):
         return dumper.represent_scalar("!str", str(data))
@@ -186,7 +184,7 @@ def build_model_instance_ui():
         model_selector = gr.Dropdown(
             choices=list(available_models.keys()),
             label="Choose a model",
-            value="KlindtCoreReadout3D"
+            value="Klindt Core Readout 3D"
         )
 
         param_container = gr.Column()

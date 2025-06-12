@@ -25,3 +25,9 @@ Visualizer page added
 - 2025/06/11
 
 Add optimizer and scheduler settings, fixed data normalization methods.
+
+## Version 0.1.3
+
+- 2025/06/12
+
+3D model fit, test on open retina built-in models.

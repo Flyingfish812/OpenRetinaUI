@@ -2,10 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from typing import List, Tuple, Iterable, Any, Optional
+from typing import Iterable, Any, Optional
 from openretina.modules.core.base_core import Core
 from openretina.modules.readout.base import Readout
 from openretina.models.core_readout import BaseCoreReadout
+from openretina.modules.losses.correlation import CorrelationLoss3d
 
 class KlindtCoreWrapper3D(Core):
     def __init__(
@@ -31,9 +32,9 @@ class KlindtCoreWrapper3D(Core):
         self.kernel_sizes = []
         for k in kernel_sizes:
             if isinstance(k, int):
-                self.kernel_sizes.append((1, k, k))
+                self.kernel_sizes.append([1, k, k])
             elif isinstance(k, Iterable) and len(k) == 2:
-                self.kernel_sizes.append((1, k[0], k[1]))
+                self.kernel_sizes.append([1, k[0], k[1]])
             elif isinstance(k, Iterable) and len(k) == 3:
                 self.kernel_sizes.append(k)
             else:
@@ -103,7 +104,7 @@ class KlindtCoreWrapper3D(Core):
         kernel_reg = sum(torch.sum(conv.weight**2) for conv in self.conv_layers)
         return kernel_reg * self.reg[0]
     
-class KlindtReadoutWrapper3D(nn.Module):
+class KlindtReadoutWrapper3D(Readout):
     def __init__(
         self,
         num_kernels: Iterable[int],
