@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from typing import Iterable, Any, Optional
+from utils.activations import build_activation_layer
 from openretina.modules.core.base_core import Core
 from openretina.modules.readout.base import Readout
 from openretina.models.core_readout import BaseCoreReadout
@@ -47,11 +48,12 @@ class KlindtCoreWrapper3D(Core):
 
         self.conv_layers = nn.ModuleList()
         self.bn_layers = nn.ModuleList() if batch_norm else None
+        self.activation_layers = nn.ModuleList()
         self.dropout = nn.Dropout3d(p=reg[3])
 
         input_channels = image_channels
         # build 3D conv stack
-        for i, (k_size, k_num, act) in enumerate(zip(kernel_sizes, num_kernels, act_fns)):
+        for i, (k_size, k_num, act_fn) in enumerate(zip(kernel_sizes, num_kernels, act_fns)):
             conv = nn.Conv3d(
                 in_channels=input_channels,
                 out_channels=k_num,
@@ -80,6 +82,8 @@ class KlindtCoreWrapper3D(Core):
                     )
                 )
             input_channels = k_num
+
+            self.activation_layers.append(build_activation_layer(act_fn))
     
     def apply_constraints(self):
         if self.kernel_constraint == 'norm':
@@ -96,8 +100,9 @@ class KlindtCoreWrapper3D(Core):
             x = conv(x)
             if self.bn_layers is not None:
                 x = self.bn_layers[i](x)
-            if self.act_fns[i] == 'relu':
-                x = F.relu(x)
+            # if self.act_fns[i] == 'relu':
+                # x = F.relu(x)
+            x = self.activation_layers[i](x)
         return x
 
     def regularizer(self) -> torch.Tensor:

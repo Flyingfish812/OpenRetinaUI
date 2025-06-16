@@ -31,3 +31,9 @@ Add optimizer and scheduler settings, fixed data normalization methods.
 - 2025/06/12
 
 3D model fit, test on open retina built-in models.
+
+## Version 0.1.4
+
+- 2025/06/16
+
+LSTA plotting added, personalized activation functions enabled.

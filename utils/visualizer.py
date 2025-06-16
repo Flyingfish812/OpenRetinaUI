@@ -74,35 +74,84 @@ def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: boo
     model = model.to(device)
     model.eval()
 
+    all_inputs = []
     all_preds = []
     all_targets = []
+    lsta_per_neuron = None
 
     for session_name, test_loader in dataloader_dict.items():
         for data_point in test_loader:
             inputs = data_point.inputs.to(device)  # 2d: [B, C, H, W]; 3d: [1, C, T, H, W]
+            inputs.requires_grad_(True)
+            outputs = model(inputs)
+            preds = outputs.detach().cpu()
             targets = data_point.targets  # 2d: [B, num_neurons]; 3d: [1, T, num_neurons]
 
-            with torch.no_grad():
-                preds = model(inputs).cpu()  # shape: [B, N] or [1, T, N]
+            # with torch.no_grad():
+            #     preds = model(inputs).cpu()  # shape: [B, N] or [1, T, N]
+
             
-            print(inputs.shape, targets.shape, preds.shape)
+            
+            # print(inputs.shape, targets.shape, preds.shape)
 
             # [1, T, N] -> [T, N]
-            if not is_2d:
+            # if not is_2d:
+                # preds = preds.squeeze(0)
+                # targets = targets.squeeze(0)
+
+            if lsta_per_neuron is None:
+                num_neurons = outputs.shape[-1]
+                lsta_per_neuron = [[] for _ in range(num_neurons)]
+            
+            if is_2d:
+                for neuron_idx in range(outputs.shape[1]):
+                    grad_outputs = torch.zeros_like(outputs)
+                    grad_outputs[:, neuron_idx] = 1.0
+                    grads = torch.autograd.grad(
+                        outputs=outputs,
+                        inputs=inputs,
+                        grad_outputs=grad_outputs,
+                        retain_graph=True,
+                        only_inputs=True,
+                    )[0]  # [B, C, H, W]
+                    lsta_per_neuron[neuron_idx].append(grads.detach().cpu())
+            else:
+                # 3D case: [1, T, N] -> [T, N]
                 preds = preds.squeeze(0)
+                outputs = outputs.squeeze(0)  # [T, N]
                 targets = targets.squeeze(0)
+                for neuron_idx in range(outputs.shape[1]):
+                    grad_outputs = torch.zeros_like(outputs)
+                    grad_outputs[:, neuron_idx] = 1.0
+                    grads = torch.autograd.grad(
+                        outputs=outputs,
+                        inputs=inputs,
+                        grad_outputs=grad_outputs,
+                        retain_graph=True,
+                        only_inputs=True,
+                    )[0]  # [1, C, T, H, W]
+                    lsta_per_neuron[neuron_idx].append(grads.squeeze(0).permute(1, 0, 2, 3).detach().cpu())
 
             # shape: [B, N] or [T, N]
+            all_inputs.append(inputs.detach().cpu())
             all_preds.append(preds)
             all_targets.append(targets)  
 
     # Concatenate along batch axis
     if is_2d:
+        images = torch.cat(all_inputs, dim=0).numpy()  # [B, C, H, W] -> [total_samples, C, H, W]
         predictions = torch.cat(all_preds, dim=0).numpy()    # [B, N] -> [total_samples, N]
         targets = torch.cat(all_targets, dim=0).numpy()      # [B, N] -> [total_samples, N]
     else:
+        images = all_inputs[0].squeeze(0).permute(1, 0, 2, 3).numpy()
         predictions = all_preds[0].numpy()    # [T, N]
         targets = all_targets[0].numpy()      # [T, N]
+    
+    lsta_array = [
+        torch.cat(lsta_per_neuron[n], dim=0).numpy()
+        for n in range(len(lsta_per_neuron))
+    ]
+    lsta_array = np.stack(lsta_array, axis=0)  # shape: [N, B, C, H, W] or [N, T, C, H, W]
 
     # Compatibility, response_data = (stimuli, neurons, trials)
     reliability, reliability_ci = bootstrap_reliability(response_data, axis=2)
@@ -121,8 +170,10 @@ def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: boo
     ]
 
     metrics = {
+        "images": images,
         "predictions": predictions,
         "targets": targets,
+        "lsta": lsta_array,
         "reliability": reliability,
         "reliability_ci": reliability_ci,
         "mse": mse,
@@ -307,7 +358,68 @@ def plot_grid_predictions(predictions, targets, correlations, n_per_plot=16):
         figs.append(fig)
     return figs
 
-# 将matplotlib图像保存为BytesIO以供gr.Image使用
+def plot_lsta(images, lstas, cell_indexs=None, nb_columns=10):
+    """
+    Plot LSTA images for all cells. Each cell gets a figure containing
+    the raw stimuli and corresponding LSTA responses.
+
+    Args:
+        images: Tensor or ndarray of shape [N, C, H, W]
+        lstas: Tensor or ndarray of shape [num_cells, N, C, H, W]
+        nb_columns: int, number of columns in subplot grid
+
+    Returns:
+        figs: List[matplotlib.figure.Figure], one for each cell
+    """
+    if isinstance(images, torch.Tensor):
+        images = images.cpu().numpy()
+    if isinstance(lstas, torch.Tensor):
+        lstas = lstas.cpu().numpy()
+
+    nb_images = images.shape[0]
+    nb_cells = lstas.shape[0]
+    nb_rows = 2 * ((nb_images - 1) // nb_columns + 1)
+    figs = []
+
+    if cell_indexs:
+        valid_cell_indices = [
+            i for i in cell_indexs if isinstance(i, int) and i >= 0 and i < nb_cells
+        ]
+    else:
+        valid_cell_indices = list(range(nb_cells))
+
+    for cell_idx in valid_cell_indices:
+        fig, axes = plt.subplots(
+            nrows=nb_rows,
+            ncols=nb_columns,
+            figsize=(nb_columns * 1.5, nb_rows * 1.5),
+            squeeze=False
+        )
+
+        for ax in axes.flat:
+            ax.set_axis_off()
+
+        for k in range(nb_images):
+            row_img = 2 * (k // nb_columns)
+            col = k % nb_columns
+
+            # 显示原始图像
+            ax_img = axes[row_img, col]
+            ax_img.imshow(images[k, 0], cmap='Greys_r',
+                          vmin=np.min(images), vmax=np.max(images))
+
+            # 显示LSTA
+            ax_lsta = axes[row_img + 1, col]
+            ax_lsta.imshow(lstas[cell_idx, k, 0], cmap='RdBu_r',
+                           vmin=-np.max(np.abs(lstas[cell_idx])),
+                           vmax=+np.max(np.abs(lstas[cell_idx])))
+
+        fig.suptitle(f"LSTA Visualization for Cell {cell_idx}", fontsize=14)
+        fig.tight_layout()
+        figs.append(fig)
+
+    return figs
+
 def fig_to_buffer(fig):
     buf = io.BytesIO()
     fig.savefig(buf, format='png')

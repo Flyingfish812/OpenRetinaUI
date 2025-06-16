@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from typing import Iterable, Optional, Any
+from utils.activations import build_activation_layer
 from openretina.modules.core.base_core import Core
 from openretina.modules.readout.base import Readout
 from openretina.models.core_readout import BaseCoreReadout
@@ -74,6 +75,7 @@ class KlindtCoreWrapper2D(Core):
 
         self.conv_layers = nn.ModuleList()
         self.bn_layers = nn.ModuleList() if batch_norm else None
+        self.activation_layers = nn.ModuleList()
         self.dropout = nn.Dropout(p=self.reg[3])
 
         input_channels = image_channels
@@ -108,6 +110,8 @@ class KlindtCoreWrapper2D(Core):
                 )
             input_channels = k_num
 
+            self.activation_layers.append(build_activation_layer(act_fn))
+
     def apply_constraints(self):
         if self.kernel_constraint == 'norm':
             with torch.no_grad():
@@ -123,8 +127,9 @@ class KlindtCoreWrapper2D(Core):
             x = conv(x)
             if self.bn_layers is not None:
                 x = self.bn_layers[i](x)
-            if self.act_fns[i] == 'relu':
-                x = F.relu(x)
+            # if self.act_fns[i] == 'relu':
+                # x = F.relu(x)
+            x = self.activation_layers[i](x)
         return x
 
     def regularizer(self) -> torch.Tensor:

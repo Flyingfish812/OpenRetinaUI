@@ -12,6 +12,7 @@ from utils.visualizer import (
     plot_fraction_of_ceiling,
     plot_example_prediction,
     plot_grid_predictions,
+    plot_lsta,
     fig_to_buffer
 )
 
@@ -136,6 +137,44 @@ def draw_grid_predictions():
     images = [fig_to_buffer(fig) for fig in fig_list]
     return images, f"✅ Grid Prediction plot done, {len(images)} images in total."
 
+def parse_index_string(index_string):
+    index_string = index_string.strip()
+    if not index_string:
+        cell_indexs = None
+    else:
+        cell_indexs = []
+        for part in index_string.split(','):
+            part = part.strip()
+            if '-' in part:
+                try:
+                    start, end = map(int, part.split('-'))
+                    cell_indexs.extend(range(start, end + 1))
+                except ValueError:
+                    continue
+            else:
+                try:
+                    i = int(part)
+                    cell_indexs.append(i)
+                except ValueError:
+                    continue
+        cell_indexs = sorted(set(cell_indexs))
+    return cell_indexs
+
+def draw_lstas(index):
+    metrics = global_state.get("metrics")
+    if metrics is None:
+        return [], "❌ No metrics available."
+
+    cell_indexs = parse_index_string(index)
+    fig_list = plot_lsta(
+        images=metrics["images"],
+        lstas=metrics["lsta"],
+        cell_indexs=cell_indexs
+    )
+
+    images = [fig_to_buffer(fig) for fig in fig_list]
+    return images, f"✅ LSTA plot done, {len(images)} images in total."
+
 def build_visualizer_ui():
     with gr.Blocks() as visualizer_page:
         gr.Markdown("# Visualizer")
@@ -167,11 +206,18 @@ def build_visualizer_ui():
         with gr.Column():
             grid_btn = gr.Button("Plot Grid Predictions")
             grid_imgs = gr.Gallery(label="Grid Prediction Plots", columns=4, height="auto", preview=False)
+        gr.Markdown("Grid of LSTAs for all neurons")
+        with gr.Column():
+            with gr.Row():
+                lsta_indices = gr.Textbox(label="Cell indices (e.g. 0,1,2 or 0-3,5)", placeholder="Leave blank to plot all (may consume a lot of memory)")
+                lsta_btn = gr.Button("Plot LSTAs")
+            lsta_imgs = gr.Gallery(label="LSTA Plots", columns=4, height="auto", preview=False)
 
         status_box = gr.Textbox(label="Status", max_lines=1, interactive=False)
 
         summary_btn.click(draw_metrics_summary, outputs=[summary_imgs, status_box])
         example_btn.click(draw_example_prediction, outputs=[example_img, status_box])
         grid_btn.click(draw_grid_predictions, outputs=[grid_imgs, status_box])
+        lsta_btn.click(draw_lstas, inputs=[lsta_indices], outputs=[lsta_imgs, status_box])
 
     return visualizer_page
