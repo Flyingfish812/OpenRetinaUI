@@ -296,6 +296,7 @@ class KlindtCoreReadout2D(BaseCoreReadout):
             core_out = core(dummy_input)
         _, _, h, w = core_out.shape  # Spatial dimensions
         mask_size = (h, w)
+        self.mask_size = mask_size
 
         # Step 3: Instantiate readout, with mask size inferred from core output
         readout = KlindtReadoutWrapper2D(

@@ -37,3 +37,15 @@ Add optimizer and scheduler settings, fixed data normalization methods.
 - 2025/06/16
 
 LSTA plotting added, personalized activation functions enabled.
+
+## Version 0.2.0
+
+- 2025/06/19
+
+The main functions of this UI application is finished, You can use this UI along with open retina to test your own model:
+
+- Data Preprocessing: `images_train`, `responses_train`, `images_val`, `responses_val`, `image_test`, `response_test`.
+- Dataloader Saving and Loading
+- Model Building and Settings Saving
+- Personalized Training Settings
+- Visualization on Model Metrics

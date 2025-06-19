@@ -13,6 +13,9 @@ from utils.visualizer import (
     plot_example_prediction,
     plot_grid_predictions,
     plot_lsta,
+    plot_convolutional_kernels,
+    plot_spatial_masks,
+    plot_feature_weights,
     fig_to_buffer
 )
 
@@ -175,6 +178,50 @@ def draw_lstas(index):
     images = [fig_to_buffer(fig) for fig in fig_list]
     return images, f"✅ LSTA plot done, {len(images)} images in total."
 
+def draw_kernels(is_2d=False, channels=None, time_frames=None):
+    model = global_state.get("model")
+    if model is None:
+        return [], "❌ No model available."
+    
+    channel_indexs = parse_index_string(channels)
+    time_frame_indexs = parse_index_string(time_frames)
+    fig_list = plot_convolutional_kernels(
+        model=model,
+        is_2d=is_2d,
+        channels=channel_indexs,
+        time_frames=time_frame_indexs
+    )
+
+    images = [fig_to_buffer(fig) for fig in fig_list]
+    return images, f"✅ Kernel plot done, {len(images)} images in total."
+
+def draw_spatial_masks(cells):
+    model = global_state.get("model")
+    if model is None:
+        return [], "❌ No model available."
+    
+    cell_indexs = parse_index_string(cells)
+
+    fig_list = plot_spatial_masks(
+        model=model,
+        cell_indices=cell_indexs
+    )
+
+    image = fig_to_buffer(fig_list)
+    return image, f"✅ Spatial mask plot done."
+
+def draw_feature_weights():
+    model = global_state.get("model")
+    if model is None:
+        return [], "❌ No model available."
+
+    fig_list = plot_feature_weights(
+        model=model
+    )
+
+    image = fig_to_buffer(fig_list)
+    return image, f"✅ Feature weights plot done."
+
 def build_visualizer_ui():
     with gr.Blocks() as visualizer_page:
         gr.Markdown("# Visualizer")
@@ -192,6 +239,29 @@ def build_visualizer_ui():
         save_btn.click(save_metrics_to_file, inputs=[save_filename], outputs=output_box)
         load_btn.click(load_metrics_from_file, inputs=[metric_dropdown], outputs=output_box)
         run_btn.click(run_metric_computation, inputs=[is_2d_input], outputs=output_box)
+
+        gr.Markdown("## Model Structures")
+        gr.Markdown("This part is for showing the structures of `Kernels`, `Spatial Mask`, and `Feature Weights`.")
+        with gr.Column():
+            with gr.Row():
+                kernel_channels = gr.Textbox(label="Channels (e.g. 0,1,2 or 0-3,5)", placeholder="Leave blank to plot all (may consume a lot of memory)")
+                kernel_time_frames = gr.Textbox(label="Time Frames (e.g. 0,1,2 or 0-3,5)", placeholder="Leave blank to plot all (may consume a lot of memory)")
+                kernel_btn = gr.Button("Plot Kernels")
+            kernel_imgs = gr.Gallery(label="Kernel Plots", columns=4, height="auto", preview=False)
+        with gr.Column():
+            with gr.Row():
+                mask_cells = gr.Textbox(label="Cells (e.g. 0,1,2 or 0-3,5)", placeholder="Leave blank to plot all (may consume a lot of memory)")
+                mask_btn = gr.Button("Plot Spatial Masks")
+            mask_imgs = gr.Image(label="Spatial Mask Plot", type="pil", interactive=False)
+        with gr.Column():
+            feature_btn = gr.Button("Plot Feature Weights")
+            feature_imgs = gr.Image(label="Feature Weights Plot", type="pil", interactive=False)
+        
+        model_box = gr.Textbox(lines=1, max_lines=1, interactive=False, label="Model Console")
+        
+        kernel_btn.click(draw_kernels, inputs=[is_2d_input, kernel_channels, kernel_time_frames], outputs=[kernel_imgs, model_box])
+        mask_btn.click(draw_spatial_masks, inputs=[mask_cells], outputs=[mask_imgs, model_box])
+        feature_btn.click(draw_feature_weights, outputs=[feature_imgs, model_box])
 
         gr.Markdown("## Visualization Plots")
         gr.Markdown("Summary plots include `Correlation`, `Reliability`, `Correlation vs Reliability`, and `Fraction of Ceiling`.")
