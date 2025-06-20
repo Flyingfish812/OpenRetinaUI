@@ -59,7 +59,7 @@ with gr.Blocks(title="Open Retina UI", css=css) as demo:
             b_exit = gr.Button("Quit Application")
             b_exit.click(exit_app)
 
-        gr.HTML("<div id='custom-footer'>© 2025 Open Retina UI — Powered by Flyingfish812</div>")
+        gr.HTML("<div id='custom-footer'>© 2025 Open Retina UI - Version 0.2.2 - Powered by Flyingfish812</div>")
 
 if __name__ == "__main__":
     demo.launch(server_name="127.0.0.1", server_port=7860, inbrowser=True, favicon_path=favicon_abs_path)

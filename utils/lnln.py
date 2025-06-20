@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.init import constant_, xavier_uniform_
 from utils.activations import ParametricSoftplus
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Any
 from utils.activations import build_activation_layer
 from utils.model import CorrelationLoss2D
 from openretina.modules.core.base_core import Core
@@ -105,18 +105,18 @@ class LNLNReadout2D(Readout):
         self.out_features = out_features
 
         C, H, W = in_shape
-        self.linear = nn.Linear(C * H * W, out_features, bias=bias)
+        self.mask = nn.Linear(C * H * W, out_features, bias=bias)
         self.activation = build_activation_layer(activation)
 
-    def forward(self, x):
+    def forward(self, x, **kwarg: Any):
         # x: [B, C, H, W]
         x = x.view(x.size(0), -1)  # Flatten
-        x = self.linear(x)
+        x = self.mask(x)
         x = self.activation(x)
         return x
 
-    def regularizer(self):
-        return torch.norm(self.linear.weight, p=2)
+    def regularizer(self, data_key: Optional[str] = None):
+        return torch.norm(self.mask.weight, p=2)
     
 class LNLNCoreReadout2D(BaseCoreReadout):
     def __init__(

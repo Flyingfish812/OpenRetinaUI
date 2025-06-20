@@ -88,18 +88,6 @@ def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: boo
             preds = outputs.detach().cpu()
             targets = data_point.targets  # 2d: [B, num_neurons]; 3d: [1, T, num_neurons]
 
-            # with torch.no_grad():
-            #     preds = model(inputs).cpu()  # shape: [B, N] or [1, T, N]
-
-            
-            
-            # print(inputs.shape, targets.shape, preds.shape)
-
-            # [1, T, N] -> [T, N]
-            # if not is_2d:
-                # preds = preds.squeeze(0)
-                # targets = targets.squeeze(0)
-
             if lsta_per_neuron is None:
                 num_neurons = outputs.shape[-1]
                 lsta_per_neuron = [[] for _ in range(num_neurons)]
@@ -184,19 +172,19 @@ def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: boo
 
         for i in range(num_neurons):
             pred = predictions[:, i]
-            target = targets[:, i]
+            # target = targets[:, i]
             # 获取所有 trial 原始数据：shape [30, trials]
             full_trials = response_data[:, i, :]  # shape: [30, num_trials]
             odd_mean = full_trials[:, ::2].mean(axis=1)
             even_mean = full_trials[:, 1::2].mean(axis=1)
-            reliability = np.corrcoef(odd_mean, even_mean)[0, 1]
+            reliability_corr = np.corrcoef(odd_mean, even_mean)[0, 1]
 
             # 预测与奇偶 trial 的相关性
             r_odd = np.corrcoef(pred, odd_mean)[0, 1]
             r_even = np.corrcoef(pred, even_mean)[0, 1]
 
-            if reliability > 0 and not np.isnan(r_odd) and not np.isnan(r_even):
-                r_nc = 0.5 * (r_odd + r_even) / np.sqrt(reliability)
+            if reliability_corr > 0 and not np.isnan(r_odd) and not np.isnan(r_even):
+                r_nc = 0.5 * (r_odd + r_even) / np.sqrt(reliability_corr)
                 r2_nc = r_nc ** 2
             else:
                 r2_nc = np.nan
@@ -479,6 +467,8 @@ def plot_convolutional_kernels(model, is_2d=False, channels=None, time_frames=No
         weight = dict(core.named_parameters())['conv_layers.0.weight'].detach().cpu()
     elif hasattr(core, 'conv'):
         weight = dict(core.named_parameters())['conv.weight'].detach().cpu()
+    elif hasattr(core, 'filter'):
+        weight = dict(core.named_parameters())['filter.weight'].detach().cpu()
     else:
         raise AttributeError("Model does not have 'conv_layers' or 'conv'.")
 

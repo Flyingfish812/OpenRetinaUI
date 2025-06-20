@@ -55,3 +55,9 @@ The main functions of this UI application is finished, You can use this UI along
 - 2025/06/20
 
 Small bug fixed. Corrected R2 plot enabled.
+
+## Version 0.2.2
+
+- 2025/06/20
+
+LNLN model enabled.
