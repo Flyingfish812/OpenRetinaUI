@@ -38,23 +38,39 @@ def build_compare_ui():
         with gr.Row():
             boxplot_btn = gr.Button("Boxplot of Corrected R²")
             barchart_btn = gr.Button("Bar Chart of Corrected R²")
-            scatter_btn = gr.Button("Scatter Comparison (First Two)")
+        
+        with gr.Row():
+            plot_output_box = gr.Image(type="pil", label="Comparison Plot")
+            plot_output_bar = gr.Image(type="pil", label="Comparison Plot")
 
-        plot_output = gr.Image(type="pil", label="Comparison Plot")
+        with gr.Column():
+            with gr.Row():
+                scatter_index1 = gr.Number(label="Model Index A", value=0, precision=0)
+                scatter_index2 = gr.Number(label="Model Index B", value=1, precision=0)
+                scatter_btn = gr.Button("Scatter Comparison (First Two)")
+            plot_output_scatter = gr.Image(type="pil", label="Comparison Plot")
         metrics_state = gr.State()
 
         refresh_btn.click(fn=list_metrics_files, outputs=metrics_dropdown)
         load_btn.click(fn=load_multiple_metrics, inputs=metrics_dropdown, outputs=[metrics_state, console])
-        boxplot_btn.click(fn=plot_corrected_r2_boxplot, inputs=metrics_state, outputs=plot_output)
-        barchart_btn.click(fn=plot_corrected_r2_barchart, inputs=metrics_state, outputs=plot_output)
+        boxplot_btn.click(fn=plot_corrected_r2_boxplot, inputs=metrics_state, outputs=plot_output_box)
+        barchart_btn.click(fn=plot_corrected_r2_barchart, inputs=metrics_state, outputs=plot_output_bar)
 
-        def _safe_scatter(metrics_list):
+        def _indexed_scatter(metrics_list, index1, index2):
+            index1 = int(index1)
+            index2 = int(index2)
             if len(metrics_list) < 2:
-                raise gr.Error("Need at least two models to compare.")
-            m1_name, m1 = metrics_list[0]
-            m2_name, m2 = metrics_list[1]
-            return plot_corrected_r2_scatter(m1_name, m2_name, m1["corrected_r2"], m2["corrected_r2"])
+                raise gr.Error("Need at least two models loaded.")
+            if index1 >= len(metrics_list) or index2 >= len(metrics_list) or index1 < 0 or index2 < 0:
+                raise gr.Error("Selected indices are out of range.")
+            name1, metrics1 = metrics_list[index1]
+            name2, metrics2 = metrics_list[index2]
+            return plot_corrected_r2_scatter(name1, name2, metrics1["corrected_r2"], metrics2["corrected_r2"])
 
-        scatter_btn.click(fn=_safe_scatter, inputs=metrics_state, outputs=plot_output)
+        scatter_btn.click(
+            fn=_indexed_scatter,
+            inputs=[metrics_state, scatter_index1, scatter_index2],
+            outputs=plot_output_scatter
+        )
 
     return compare_page

@@ -92,7 +92,7 @@ def step_prepare(train_chunk_size, batch_size, seed, clip_length):
     if global_state["converted_data"] is None:
         return append_log_dataio("❌ 请先执行格式转换")
     try:
-        data = global_state["normalized_data"] if global_state["normalized_data"] is not None else global_state["converted_data"]
+        data = global_state.get("normalized_data") or global_state.get("converted_data")
         merged_data, metadata = prepare_data_and_metadata(
             normalized_data=data,
             train_chunk_size=int(train_chunk_size),

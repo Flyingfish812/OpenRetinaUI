@@ -58,7 +58,7 @@ def run_metric_computation(is_2d_input: bool):
     try:
         model = global_state.get("model")
         dataloader = global_state.get("flattened_dataloader" if is_2d_input else "dataloader")
-        normalized_data = global_state.get("normalized_data")
+        normalized_data = global_state.get("normalized_data") or global_state.get("converted_data")
 
         if model is None:
             return append_log_visualizer("❌ Model not loaded.")
