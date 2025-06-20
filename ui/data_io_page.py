@@ -67,8 +67,10 @@ def step_convert_format():
         info.append(f"Validation size: {converted['images_val'].shape}")
         info.append(f"Validation responses size: {converted['responses_val'].shape}")
         info.append(f"Test size: {converted['images_test'].shape}")
-        # info.append(f"Test responses size: {converted['responses_test'].shape}")
-        info.append(f"Test responses with trail: {converted.get('responses_test_by_trial', None).shape}")
+        if converted.get('responses_test_by_trial', None) is not None:
+            info.append(f"Test responses with trail: {converted['responses_test_by_trial'].shape}")
+        else:
+            info.append(f"Test responses with trail: {converted.get('responses_test_by_trial', None)}")
         info.append("✅ 格式转换成功")
         return append_log_dataio("\n".join(info))
     except Exception as e:
@@ -87,11 +89,12 @@ def step_normalize():
 
 # Merge data (train and validation)
 def step_prepare(train_chunk_size, batch_size, seed, clip_length):
-    if global_state["normalized_data"] is None:
-        return append_log_dataio("❌ 请先规一化数据")
+    if global_state["converted_data"] is None:
+        return append_log_dataio("❌ 请先执行格式转换")
     try:
+        data = global_state["normalized_data"] if global_state["normalized_data"] is not None else global_state["converted_data"]
         merged_data, metadata = prepare_data_and_metadata(
-            normalized_data=global_state["normalized_data"],
+            normalized_data=data,
             train_chunk_size=int(train_chunk_size),
             batch_size=int(batch_size),
             seed=int(seed),

@@ -170,6 +170,31 @@ def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: boo
         for i in range(len(correlations))
     ]
 
+    corrected_r2 = []
+    num_images, num_neurons = predictions.shape
+    assert response_data.shape[:2] == (num_images, num_neurons)
+
+    for i in range(num_neurons):
+        pred = predictions[:, i]
+        target = targets[:, i]
+        # 获取所有 trial 原始数据：shape [30, trials]
+        full_trials = response_data[:, i, :]  # shape: [30, num_trials]
+        odd_mean = full_trials[:, ::2].mean(axis=1)
+        even_mean = full_trials[:, 1::2].mean(axis=1)
+        reliability = np.corrcoef(odd_mean, even_mean)[0, 1]
+
+        # 预测与奇偶 trial 的相关性
+        r_odd = np.corrcoef(pred, odd_mean)[0, 1]
+        r_even = np.corrcoef(pred, even_mean)[0, 1]
+
+        if reliability > 0 and not np.isnan(r_odd) and not np.isnan(r_even):
+            r_nc = 0.5 * (r_odd + r_even) / np.sqrt(reliability)
+            r2_nc = r_nc ** 2
+        else:
+            r2_nc = np.nan
+
+        corrected_r2.append(r2_nc)
+
     metrics = {
         "images": images,
         "predictions": predictions,
@@ -181,10 +206,13 @@ def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: boo
         "rmse": rmse,
         "correlations": correlations,
         "fraction_of_ceiling": foc,
+        "corrected_r2": corrected_r2,
         "mean_correlation": np.nanmean(correlations),
         "median_correlation": np.nanmedian(correlations),
         "mean_fraction_of_ceiling": np.nanmean(foc),
-        "median_fraction_of_ceiling": np.nanmedian(foc)
+        "median_fraction_of_ceiling": np.nanmedian(foc),
+        "mean_corrected_r2": np.nanmean(corrected_r2),
+        "median_corrected_r2": np.nanmedian(corrected_r2),
     }
 
     global_state["metrics"] = metrics

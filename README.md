@@ -49,3 +49,9 @@ The main functions of this UI application is finished, You can use this UI along
 - Model Building and Settings Saving
 - Personalized Training Settings
 - Visualization on Model Metrics
+
+## Version 0.2.1
+
+- 2025/06/20
+
+Small bug fixed.

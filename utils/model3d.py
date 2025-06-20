@@ -220,7 +220,7 @@ class KlindtCoreReadout3D(BaseCoreReadout):
     def __init__(
         self,
         # Core parameters
-        image_size: int,
+        image_size: int | Iterable[int],
         image_channels: int,
         kernel_sizes: Iterable[int | Iterable[int]],
         num_kernels: Iterable[int],
@@ -261,7 +261,12 @@ class KlindtCoreReadout3D(BaseCoreReadout):
         )
 
         # Step 2: Get the spatial dimensions of the core output (h, w)
-        dummy_input = torch.zeros(1, image_channels, 3, image_size, image_size)  # T=3 是任意正整数
+        if isinstance(image_size, int):
+            dummy_input = torch.zeros(1, image_channels, 3, image_size, image_size)  # T=3 是任意正整数
+        elif isinstance(image_size, Iterable) and len(image_size) == 2:
+            dummy_input = torch.zeros(1, image_channels, 3, *image_size)
+        else:
+            raise ValueError(f"Invalid image_size: {image_size}")
         with torch.no_grad():
             core_out = core(dummy_input)
         _, _, _, h, w = core_out.shape  # Spatial dimensions

@@ -82,6 +82,8 @@ def run_metric_computation(is_2d_input: bool):
         append_log_visualizer(f"  Median Correlation: {result['median_correlation']:.4f}")
         append_log_visualizer(f"  Mean Fraction of Ceiling: {result['mean_fraction_of_ceiling']:.4f}")
         append_log_visualizer(f"  Median Fraction of Ceiling: {result['median_fraction_of_ceiling']:.4f}")
+        append_log_visualizer(f"  Mean Corrected R2: {result['mean_corrected_r2']:.4f}")
+        append_log_visualizer(f"  Median Corrected R2: {result['median_corrected_r2']:.4f}")
         return append_log_visualizer("✅ Metric computation complete.")
     except Exception as e:
         return append_log_visualizer(f"❌ Failed to compute metrics: {str(e)}")

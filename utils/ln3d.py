@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from openretina.modules.core.base_core import Core
 from openretina.modules.readout.base import Readout
 from openretina.models.core_readout import BaseCoreReadout
-from utils.activations import ParametricSoftplus
+from utils.activations import build_activation_layer
 from typing import Iterable, Optional, Any
 
 
@@ -94,7 +94,7 @@ class LNCore3D(Core):
         self.conv = nn.Conv3d(
             in_channels=in_channels,
             out_channels=1,
-            kernel_size=kernel_size,
+            kernel_size=self.kernel_size,
             bias=False
         )
 
@@ -135,11 +135,11 @@ class LNReadout3D(Readout):
         self,
         mask_size: Iterable[int],  # (H, W)
         num_neurons: int,
-        activation: nn.Module,
+        activation: str,
     ):
         super().__init__()
         self.mask = nn.Linear(mask_size[0] * mask_size[1], num_neurons)
-        self.activation = activation
+        self.activation = build_activation_layer(activation)
         self.mask_size = mask_size
 
     def forward(self, x, **kwarg: Any):
@@ -168,10 +168,10 @@ class LNCoreReadout3D(BaseCoreReadout):
     def __init__(
         self,
         in_channels: int,
-        input_size: int,
+        input_size: int | Iterable[int],
         num_neurons: int,
         kernel_size: int | Iterable[int],
-        activation: nn.Module,
+        activation: str,
         kernel_initializer: Optional[str] = 'truncated_normal',
         sta: Optional[torch.Tensor] = None,
         sparsity_factor: float = 0.001,
@@ -196,7 +196,12 @@ class LNCoreReadout3D(BaseCoreReadout):
         )
 
         # Step 2: Dummy forward to get output shape
-        dummy_input = torch.zeros(1, in_channels, 3, input_size, input_size)
+        if isinstance(input_size, int):
+            dummy_input = torch.zeros(1, in_channels, 3, input_size, input_size)
+        elif isinstance(input_size, Iterable) and len(input_size) == 2:
+            dummy_input = torch.zeros(1, in_channels, 3, *input_size)
+        else:
+            raise ValueError(f"Invalid input size: {input_size}")
         with torch.no_grad():
             core_out = core(dummy_input)
         _, _, _, H, W = core_out.shape

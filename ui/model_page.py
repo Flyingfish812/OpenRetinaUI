@@ -10,6 +10,7 @@ from utils.model3d import *
 from utils.model import *
 from utils.ln import *
 from utils.ln3d import *
+from utils.lnln import *
 from openretina.models.core_readout import CoreReadout
 
 MAX_PARAMS = 50
@@ -20,6 +21,7 @@ available_models = {
     "Klindt Core Readout 3D": KlindtCoreReadout3D,
     "Linear-Nonlinear 2D": LNCoreReadout2D,
     "Linear-Nonlinear 3D": LNCoreReadout3D,
+    "LNLN 2D": LNLNCoreReadout2D,
     "(Open Retina Default) Core Readout": CoreReadout,
 }
 

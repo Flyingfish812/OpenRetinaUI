@@ -6,6 +6,7 @@ from ui.dataloader_page import *
 from ui.model_page import *
 from ui.train_page import *
 from ui.visualizer_page import *
+from ui.compare_page import *
 
 def exit_app():
     os._exit(0)
@@ -50,6 +51,9 @@ with gr.Blocks(title="Open Retina UI", css=css) as demo:
 
         with gr.Tab("Visualizer"):
             build_visualizer_ui()
+
+        with gr.Tab("Compare"):
+            build_compare_ui()
         
         with gr.Row():
             b_exit = gr.Button("Quit Application")
