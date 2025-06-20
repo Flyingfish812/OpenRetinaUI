@@ -128,7 +128,7 @@ class LNLNCoreReadout2D(BaseCoreReadout):
         use_bipolar: bool = True,
         use_feature_layer: bool = True,
         use_batchnorm: bool = False,
-        flatten_merge: bool = True,
+        flatten_merge: bool = False,
         core_activation: str = "parametric_softplus",
         core_bias: bool = False,
         readout_bias: bool = True,
