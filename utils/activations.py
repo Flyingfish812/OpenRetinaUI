@@ -96,6 +96,9 @@ def build_activation_layer(activation: str) -> nn.Module:
     # 简写ReQU
     if activation == 'requ':
         return ReQU()
+    
+    if activation == 'elu':
+        return nn.ELU(inplace=True)
 
     # 支持参数化格式，如 'parametric_relu:neg=1,pos=0.5'
     if ':' in activation:

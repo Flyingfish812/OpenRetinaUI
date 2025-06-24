@@ -61,3 +61,9 @@ Small bug fixed. Corrected R2 plot enabled.
 - 2025/06/20
 
 LNLN model enabled.
+
+## Version 0.2.3
+
+- 2025/06/24
+
+LSTA plot optimized.

@@ -1,7 +1,8 @@
 import os
 import pickle
 import gradio as gr
-from ui.global_settings import global_state, METRICS_SAVE_DIR
+import numpy as np
+from ui.global_settings import global_state, METRICS_SAVE_DIR, APP_DIR
 from utils.data_io import Unpickler
 from utils.visualizer import (
     compute_evaluation_metrics,
@@ -73,7 +74,9 @@ def run_metric_computation(is_2d_input: bool):
         if session_dict is None or not session_dict:
             return append_log_visualizer("❌ Test set not found in dataloader.")
 
-        result = compute_evaluation_metrics(model, session_dict, response_data, is_2d=is_2d_input)
+        # test_std = global_state.get("std_dict", {}).get("images_test", 1.0)
+        test_std = 1.0
+        result = compute_evaluation_metrics(model, session_dict, response_data, is_2d=is_2d_input, test_std=test_std)
         global_state["metrics"] = result
         append_log_visualizer("Model Evaluation Results:")
         append_log_visualizer(f"  MSE: {result['mse']:.4f}")
@@ -168,13 +171,17 @@ def parse_index_string(index_string):
 
 def draw_lstas(index):
     metrics = global_state.get("metrics")
-    if metrics is None:
-        return [], "❌ No metrics available."
+    lsta_data = global_state.get("lsta_data")
+    if metrics is None or lsta_data is None:
+        return [], "❌ Metrics and LSTA should both be available."
 
     cell_indexs = parse_index_string(index)
     fig_list = plot_lsta(
         images=metrics["images"],
-        lstas=metrics["lsta"],
+        lsta_data=lsta_data["lsta"],
+        lsta_model=metrics["lsta"],
+        ellipses=lsta_data["ellipses"],
+        image_indices=lsta_data["image_indices"],
         cell_indexs=cell_indexs
     )
 
@@ -224,6 +231,22 @@ def draw_feature_weights():
 
     image = fig_to_buffer(fig_list)
     return image, f"✅ Feature weights plot done."
+
+LSTA_DIR = os.path.join(APP_DIR, "data", "lsta")
+
+def list_lsta_files():
+    files = os.listdir(LSTA_DIR)
+    return [f for f in files if f.endswith(".npz")]
+
+def load_selected_lsta(file_name):
+    file_path = os.path.join(LSTA_DIR, file_name)
+    if not os.path.exists(file_path):
+        return gr.update(), f"❌ File not found: {file_name}"
+
+    data = np.load(file_path)
+    global_state["lsta_data"] = dict(data)
+    info = "\n".join([f"{k}: shape {v.shape}" for k, v in data.items()])
+    return f"✅ Loaded {file_name}" + info
 
 def build_visualizer_ui():
     with gr.Blocks() as visualizer_page:
@@ -279,18 +302,31 @@ def build_visualizer_ui():
         with gr.Column():
             grid_btn = gr.Button("Plot Grid Predictions")
             grid_imgs = gr.Gallery(label="Grid Prediction Plots", columns=4, height="auto", preview=False)
-        gr.Markdown("Grid of LSTAs for all neurons")
+        status_box = gr.Textbox(label="Status", max_lines=1, interactive=False)
+        
+        gr.Markdown("## LSTA")
+
+        with gr.Row():
+            lsta_file_dropdown = gr.Dropdown(label="Select LSTA dataset file", choices=list_lsta_files())
+            lsta_load_btn = gr.Button("Load Selected File")
+        lsta_file_info = gr.Textbox(label="LSTA File Contents", lines=5, interactive=False)
+
         with gr.Column():
             with gr.Row():
-                lsta_indices = gr.Textbox(label="Cell indices (e.g. 0,1,2 or 0-3,5)", placeholder="Leave blank to plot all (may consume a lot of memory)")
+                lsta_indices = gr.Textbox(label="Cell indices (e.g. 0,1,2 or 0-3,5)",
+                                          value="0,1,5,9,17,19,21,26,28,36,39",
+                                          placeholder="Leave blank to plot all (may consume a lot of memory)")
                 lsta_btn = gr.Button("Plot LSTAs")
             lsta_imgs = gr.Gallery(label="LSTA Plots", columns=4, height="auto", preview=False)
+        lsta_box = gr.Textbox(label="LSTA Status", max_lines=1, interactive=False)
 
-        status_box = gr.Textbox(label="Status", max_lines=1, interactive=False)
+        lsta_load_btn.click(fn=load_selected_lsta,
+                            inputs=lsta_file_dropdown,
+                            outputs=[lsta_file_info])
 
         summary_btn.click(draw_metrics_summary, outputs=[summary_imgs, status_box])
         example_btn.click(draw_example_prediction, outputs=[example_img, status_box])
         grid_btn.click(draw_grid_predictions, outputs=[grid_imgs, status_box])
-        lsta_btn.click(draw_lstas, inputs=[lsta_indices], outputs=[lsta_imgs, status_box])
+        lsta_btn.click(draw_lstas, inputs=[lsta_indices], outputs=[lsta_imgs, lsta_box])
 
     return visualizer_page

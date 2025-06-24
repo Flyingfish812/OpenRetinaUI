@@ -59,7 +59,7 @@ def bootstrap_reliability(data, n_bootstrap=100, axis=2):
     reliability_ci = np.percentile(reliabilities, [2.5, 97.5], axis=0)
     return reliability, reliability_ci
 
-def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: bool, device='cuda'):
+def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: bool, test_std=1, device='cuda'):
     """
     Compute model prediction and evaluation metrics given a test dataloader.
 
@@ -85,6 +85,8 @@ def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: boo
             inputs = data_point.inputs.to(device)  # 2d: [B, C, H, W]; 3d: [1, C, T, H, W]
             inputs.requires_grad_(True)
             outputs = model(inputs)
+            print("Mean response:", outputs.mean().item())
+            print("Std response:", outputs.std().item())
             preds = outputs.detach().cpu()
             targets = data_point.targets  # 2d: [B, num_neurons]; 3d: [1, T, num_neurons]
 
@@ -103,6 +105,7 @@ def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: boo
                         retain_graph=True,
                         only_inputs=True,
                     )[0]  # [B, C, H, W]
+                    grads *= test_std
                     lsta_per_neuron[neuron_idx].append(grads.detach().cpu())
             else:
                 # 3D case: [1, T, N] -> [T, N]
@@ -119,6 +122,7 @@ def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: boo
                         retain_graph=True,
                         only_inputs=True,
                     )[0]  # [1, C, T, H, W]
+                    grads *= test_std
                     lsta_per_neuron[neuron_idx].append(grads.squeeze(0).permute(1, 0, 2, 3).detach().cpu())
 
             # shape: [B, N] or [T, N]
@@ -393,63 +397,97 @@ def plot_grid_predictions(predictions, targets, correlations, n_per_plot=16):
         figs.append(fig)
     return figs
 
-def plot_lsta(images, lstas, cell_indexs=None, nb_columns=10):
+def plot_lsta(images, lsta_data, lsta_model, ellipses, image_indices, cell_indexs=None):
     """
-    Plot LSTA images for all cells. Each cell gets a figure containing
-    the raw stimuli and corresponding LSTA responses.
+    Plot cropped regions around ellipses for raw images, data-based LSTA, and model-predicted LSTA.
 
     Args:
-        images: Tensor or ndarray of shape [N, C, H, W]
-        lstas: Tensor or ndarray of shape [num_cells, N, C, H, W]
-        nb_columns: int, number of columns in subplot grid
+        images: np.ndarray, shape [N, C, H, W]
+        lsta_data: np.ndarray, shape [num_cells, 8, C, H, W]
+        lsta_model: np.ndarray, shape [num_cells, 8, C, H, W]
+        ellipses: np.ndarray, shape [num_cells, 2, 360]
+        image_indices: list[int], length 8
+        cell_indexs: list[int] or None
 
     Returns:
-        figs: List[matplotlib.figure.Figure], one for each cell
+        figs: List[matplotlib.figure.Figure]
     """
     if isinstance(images, torch.Tensor):
         images = images.cpu().numpy()
-    if isinstance(lstas, torch.Tensor):
-        lstas = lstas.cpu().numpy()
+    if isinstance(lsta_data, torch.Tensor):
+        lsta_data = lsta_data.cpu().numpy()
+    if isinstance(lsta_model, torch.Tensor):
+        lsta_model = lsta_model.cpu().numpy()
+    if isinstance(ellipses, torch.Tensor):
+        ellipses = ellipses.cpu().numpy()
 
-    nb_images = images.shape[0]
-    nb_cells = lstas.shape[0]
-    nb_rows = 2 * ((nb_images - 1) // nb_columns + 1)
     figs = []
+    nb_images = 8
+    nb_rows = 4
+    nb_cols = 6
+    factor = 108 / 72  # 缩放因子
 
-    if cell_indexs:
-        valid_cell_indices = [
-            i for i in cell_indexs if isinstance(i, int) and i >= 0 and i < nb_cells
-        ]
+    if cell_indexs is None:
+        valid_indices = list(range(lsta_model.shape[0]))
     else:
-        valid_cell_indices = list(range(nb_cells))
+        valid_indices = [i for i in cell_indexs if 0 <= i < lsta_model.shape[0]]
 
-    for cell_idx in valid_cell_indices:
-        fig, axes = plt.subplots(
-            nrows=nb_rows,
-            ncols=nb_columns,
-            figsize=(nb_columns * 1.5, nb_rows * 1.5),
-            squeeze=False
-        )
+    def get_crop_bounds(x, y, padding, shape_limit):
+        x_min = max(int(np.floor(x.min()) - padding), 0)
+        x_max = min(int(np.ceil(x.max()) + padding), shape_limit)
+        y_min = max(int(np.floor(y.min()) - padding), 0)
+        y_max = min(int(np.ceil(y.max()) + padding), shape_limit)
+        return x_min, x_max, y_min, y_max
 
+    for cell_idx in valid_indices:
+        fig, axes = plt.subplots(nb_rows, nb_cols, figsize=(nb_cols * 1.8, nb_rows * 1.8), squeeze=False)
         for ax in axes.flat:
             ax.set_axis_off()
 
-        for k in range(nb_images):
-            row_img = 2 * (k // nb_columns)
-            col = k % nb_columns
+        x72 = ellipses[cell_idx, 0]
+        y72 = ellipses[cell_idx, 1]
+        x108 = x72 * factor
+        y108 = y72 * factor
 
-            # 显示原始图像
-            ax_img = axes[row_img, col]
-            ax_img.imshow(images[k, 0], cmap='Greys_r',
-                          vmin=np.min(images), vmax=np.max(images))
+        for i in range(nb_images):
+            row = i // (nb_cols // 3)
+            col_group = (i % (nb_cols // 3)) * 3
 
-            # 显示LSTA
-            ax_lsta = axes[row_img + 1, col]
-            ax_lsta.imshow(lstas[cell_idx, k, 0], cmap='RdBu_r',
-                           vmin=-np.max(np.abs(lstas[cell_idx])),
-                           vmax=+np.max(np.abs(lstas[cell_idx])))
+            # === 原图 crop ===
+            x0, x1, y0, y1 = get_crop_bounds(x108, y108, padding=10, shape_limit=108)
+            raw_crop = images[image_indices[i], 0, y0:y1, x0:x1]
+            extent_raw = [x0, x1, y1, y0]
 
-        fig.suptitle(f"LSTA Visualization for Cell {cell_idx}", fontsize=14)
+            ax1 = axes[row, col_group]
+            ax1.imshow(raw_crop, interpolation='bicubic', cmap='gray', extent=extent_raw, vmin=np.min(images), vmax=np.max(images))
+            ax1.plot(x108, y108, 'y', lw=0.8)
+            ax1.set_title(f"Stim {i}", fontsize=6)
+
+            # === 实验 LSTA crop ===
+            x0, x1, y0, y1 = get_crop_bounds(x72, y72, padding=5, shape_limit=72)
+            data = lsta_data[cell_idx, i, y0:y1, x0:x1]
+            data = data ** 2 * np.sign(data)
+            vmax = np.max([np.amax(data), -np.amin(data)]) * 0.75
+            extent_lsta = [x0, x1, y1, y0]
+
+            ax2 = axes[row, col_group + 1]
+            ax2.imshow(data, interpolation='bicubic', cmap='RdBu_r', vmin=-vmax, vmax=vmax, extent=extent_lsta)
+            ax2.plot(x72, y72, 'y', lw=0.8)
+            ax2.set_title("Exp", fontsize=6)
+
+            # === 模型 LSTA crop ===
+            x0, x1, y0, y1 = get_crop_bounds(x108, y108, padding=10, shape_limit=108)
+            data = lsta_model[cell_idx, i, 0, y0:y1, x0:x1]
+            data = data ** 2 * np.sign(data)
+            vmax = np.max([np.amax(data), -np.amin(data)]) * 0.75
+            extent_model = [x0, x1, y1, y0]
+
+            ax3 = axes[row, col_group + 2]
+            ax3.imshow(data, interpolation='bicubic', cmap='RdBu_r', vmin=-vmax, vmax=vmax, extent=extent_model)
+            ax3.plot(x108, y108, 'y', lw=0.8)
+            ax3.set_title("Model", fontsize=6)
+
+        fig.suptitle(f"LSTA Comparison for Cell {cell_idx}", fontsize=12)
         fig.tight_layout()
         figs.append(fig)
 
@@ -593,7 +631,7 @@ def plot_feature_weights(model):
 
 def fig_to_buffer(fig):
     buf = io.BytesIO()
-    fig.savefig(buf, format='png')
+    fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
     buf.seek(0)
     plt.close(fig)
     return Image.open(buf)
