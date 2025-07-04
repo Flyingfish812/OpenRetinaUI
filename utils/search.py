@@ -10,7 +10,7 @@ from openretina.data_io.cyclers import LongCycler, ShortCycler
 
 def build_model_from_config(model_class, config: dict):
     """
-    根据模型类和参数字典实例化模型
+    Instantiate a model class with the given configuration.
     """
     return model_class(**config)
 
@@ -71,9 +71,10 @@ def train_and_evaluate_model(model, dataloader, train_config=None, monitor="val_
         save_weights_only=True
     )
 
+    accelerator = "gpu" if torch.cuda.is_available() else "cpu"
     max_epochs = train_config.get("max_epochs", 100)
     trainer = Trainer(
-        accelerator="gpu",
+        accelerator=accelerator,
         max_epochs=max_epochs,
         logger=logger,
         callbacks=[early_stopping, lr_monitor, checkpoint],
@@ -82,13 +83,12 @@ def train_and_evaluate_model(model, dataloader, train_config=None, monitor="val_
     train_loader = LongCycler(dataloader["train"])
     val_loader = ShortCycler(dataloader["validation"])
 
-    # 优化器配置（允许传入 start_lr 等）
     model.configure_optimizers = lambda: configure_external_optimizers(
         model,
         factor=train_config.get("scheduler_factor", 0.1),
         patience=train_config.get("scheduler_patience", 10),
-        threshold=train_config.get("scheduler_threshold", 5e-4),
-        start_lr=train_config.get("lr", 1e-3),
+        threshold=train_config.get("scheduler_threshold", 1e-4),
+        start_lr=train_config.get("lr", 1e-2),
         min_lr=train_config.get("min_lr", 1e-6)
     )
 
