@@ -59,7 +59,7 @@ def bootstrap_reliability(data, n_bootstrap=100, axis=2):
     reliability_ci = np.percentile(reliabilities, [2.5, 97.5], axis=0)
     return reliability, reliability_ci
 
-def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: bool, test_std=1, device='cuda'):
+def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: bool, test_std=1):
     """
     Compute model prediction and evaluation metrics given a test dataloader.
 
@@ -72,6 +72,7 @@ def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: boo
     Returns:
         dict[str, Any]: evaluation results including metrics and intermediate tensors
     """
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = model.to(device)
     model.eval()
 

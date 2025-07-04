@@ -2,8 +2,11 @@ import os
 import torch
 import datetime
 from ui.global_settings import LOG_SAVE_DIR, global_state
+from utils.train_callbacks import LiveLogCallback
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
+from lightning.pytorch import Trainer
+from openretina.data_io.cyclers import LongCycler, ShortCycler
 
 # 设置 TensorBoardLogger
 def create_logger(log_dir: str, run_name: str | None = None) -> TensorBoardLogger:
@@ -61,3 +64,41 @@ def configure_external_optimizers(model, factor = 0.5, patience = 25, threshold 
     }
 
     return {"optimizer": optimizer, "lr_scheduler": scheduler}
+
+def trigger_train_from_config(config: dict):
+    logger = create_logger(LOG_SAVE_DIR, config["train_name"])
+    early_stopping = create_early_stopping(
+        config["monitor"], config["patience"], config["mode"],
+        config["verbose"], config["min_delta"]
+    )
+    lr_monitor = create_lr_monitor(config["interval"])
+    model_checkpoint = create_checkpoint(
+        config["monitor"], config["mode"], config["save_weights_only"]
+    )
+    live_log_callback = LiveLogCallback()
+
+    accelerator = "gpu" if torch.cuda.is_available() else "cpu"
+
+    trainer = Trainer(
+        accelerator=accelerator,
+        max_epochs=config["max_epochs"],
+        logger=logger,
+        callbacks=[early_stopping, lr_monitor, model_checkpoint, live_log_callback],
+    )
+
+    dataloader = global_state["flattened_dataloader"] if config["input_2d"] else global_state["dataloader"]
+    train_loader = LongCycler(dataloader["train"])
+    val_loader = ShortCycler(dataloader["validation"])
+
+    model = global_state["model"]
+    model.configure_optimizers = lambda: configure_external_optimizers(
+        model,
+        config["sr_factor"],
+        config["sr_patience"],
+        config["sr_threshold"],
+        config["sr_startlr"],
+        config["sr_minlr"]
+    )
+
+    global_state["training_logs"] = []
+    trainer.fit(model, train_loader, val_loader)

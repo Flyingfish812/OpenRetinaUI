@@ -4,12 +4,10 @@ import time
 import io
 import contextlib
 import gradio as gr
+import torch
 from ui.global_settings import global_state, LOG_SAVE_DIR
 from utils.data_io import print_dataloader_info
 from utils.train import *
-from utils.train_callbacks import LiveLogCallback
-from lightning.pytorch import Trainer
-from openretina.data_io.cyclers import LongCycler, ShortCycler
 
 log_messages_train = []
 
@@ -60,28 +58,24 @@ def start_tensorboard(logdir=LOG_SAVE_DIR, port=6006):
 def trigger_train(monitor, input_2d, train_name, patience, mode, verbose, min_delta, interval, save_weights_only, max_epochs,
                   sr_factor, sr_patience, sr_threshold, sr_startlr, sr_minlr):
     try:
-        logger = create_logger(LOG_SAVE_DIR, train_name)
-        early_stopping = create_early_stopping(monitor, patience, mode, verbose, min_delta)
-        lr_monitor = create_lr_monitor(interval)
-        model_checkpoint = create_checkpoint(monitor, mode, save_weights_only)
-
-        live_log_callback = LiveLogCallback()
-
-        trainer = Trainer(
-            accelerator="gpu",
-            max_epochs=max_epochs,
-            logger=logger,
-            callbacks=[early_stopping, lr_monitor, model_checkpoint, live_log_callback],
-        )
-
-        dataloader = global_state["flattened_dataloader"] if input_2d else global_state["dataloader"]
-        train_loader = LongCycler(dataloader["train"])
-        val_loader = ShortCycler(dataloader["validation"])
-        model = global_state["model"]
-        model.configure_optimizers = lambda: configure_external_optimizers(model, sr_factor, sr_patience, sr_threshold, sr_startlr, sr_minlr)
-
-        global_state["training_logs"] = []
-        trainer.fit(model, train_loader, val_loader)
+        config = {
+            "monitor": monitor,
+            "input_2d": input_2d,
+            "train_name": train_name,
+            "patience": patience,
+            "mode": mode,
+            "verbose": verbose,
+            "min_delta": min_delta,
+            "interval": interval,
+            "save_weights_only": save_weights_only,
+            "max_epochs": max_epochs,
+            "sr_factor": sr_factor,
+            "sr_patience": sr_patience,
+            "sr_threshold": sr_threshold,
+            "sr_startlr": sr_startlr,
+            "sr_minlr": sr_minlr
+        }
+        trigger_train_from_config(config)
 
         return "✅ Model trained successfully"
     except Exception as e:
@@ -101,23 +95,23 @@ def build_train_ui():
 
         with gr.Row():
             patience = gr.Slider(1, 20, value=15, step=1, label="Early Stopping Patience")
-            min_delta = gr.Number(value=0.0001, label="Early Stopping min_delta")
+            min_delta = gr.Number(value=1e-5, label="Early Stopping min_delta")
             verbose = gr.Checkbox(value=False, label="Logs")
 
         with gr.Row():
             save_weights_only = gr.Checkbox(value=False, label="Weights Only")
-            max_epochs = gr.Slider(1, 300, value=200, step=1, label="Max Epochs")
+            max_epochs = gr.Slider(1, 300, value=100, step=1, label="Max Epochs")
         
         gr.Markdown("## Optimizer and Scheduler")
         gr.Markdown("Parameters for optimizer and scheduler.")
 
         with gr.Row():
-            sr_factor = gr.Slider(0.1, 1.0, value=0.5, step=0.1, label="Scheduler Reduce Factor")
-            sr_patience = gr.Slider(1, 30, value=25, step=1, label="Scheduler Patience")
+            sr_factor = gr.Slider(0.1, 1.0, value=0.1, step=0.1, label="Scheduler Reduce Factor")
+            sr_patience = gr.Slider(1, 30, value=15, step=1, label="Scheduler Patience")
         
         with gr.Row():
-            sr_threshold = gr.Number(value=0.0005, label="Scheduler Threshold")
-            sr_startlr = gr.Number(value=1e-4, label="Optimizer Start Learning Rate")
+            sr_threshold = gr.Number(value=0.0001, label="Scheduler Threshold")
+            sr_startlr = gr.Number(value=1e-2, label="Optimizer Start Learning Rate")
             sr_minlr = gr.Number(value=1e-6, label="Scheduler Min Learning Rate")
 
         gr.Markdown("## Materials Check and Training Session")
