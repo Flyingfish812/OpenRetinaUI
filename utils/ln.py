@@ -5,53 +5,9 @@ from openretina.modules.core.base_core import Core
 from openretina.modules.readout.base import Readout
 from openretina.models.core_readout import BaseCoreReadout
 from utils.activations import build_activation_layer
-from utils.model import CorrelationLoss2D
+from utils.model import CorrelationLoss2D, L1Smooth2DRegularizer
 from typing import Iterable, Optional, Any
 
-
-class L1Smooth2DRegularizer:
-    def __init__(self, sparsity_factor=1e-4, smoothness_factor=1e-4, padding_mode='constant'):
-        self.sparsity_factor = sparsity_factor
-        self.smoothness_factor = smoothness_factor
-        self.padding_mode = padding_mode
-
-        # Laplacian kernel (3x3)
-        self.registered_kernel = torch.tensor(
-            [[0.25, 0.5, 0.25],
-             [0.5, -3.0, 0.5],
-             [0.25, 0.5, 0.25]],
-            dtype=torch.float32
-        ).view(1, 1, 3, 3)  # shape: (out_channels=1, in_channels=1, H, W)
-
-    def __call__(self, weights: torch.Tensor) -> torch.Tensor:
-        reg = torch.tensor(0.0, device=weights.device)
-
-        # L1 sparsity
-        if self.sparsity_factor:
-            reg += self.sparsity_factor * torch.sum(torch.abs(weights))
-
-        # Smoothness via Laplacian
-        if self.smoothness_factor:
-            # weights shape: [out_channels, in_channels, H, W] (PyTorch)
-            w = weights.permute(1, 0, 2, 3)  # [in, out, H, W]
-            B, C, H, W = w.shape
-
-            w = w.reshape(-1, 1, H, W)  # [B*C, 1, H, W]
-
-            pad = nn.ReflectionPad2d(1) if self.padding_mode == 'symmetric' else nn.ConstantPad2d(1, 0.0)
-            w_pad = pad(w)
-
-            lap_kernel = self.registered_kernel.to(weights.device)
-            lap_kernel = lap_kernel.repeat(w.shape[0], 1, 1, 1)  # depthwise conv style
-
-            x_lap = F.conv2d(w_pad, lap_kernel, groups=w.shape[0])
-            tmp1 = torch.sum(x_lap ** 2, dim=(1, 2, 3))
-            tmp2 = 1e-8 + torch.sum(w ** 2, dim=(1, 2, 3))
-
-            smoothness_reg = torch.sum(tmp1 / tmp2)
-            reg += self.smoothness_factor * smoothness_reg.sqrt()
-
-        return reg
 
 class LNCore2D(Core):
     def __init__(

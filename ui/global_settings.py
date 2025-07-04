@@ -18,6 +18,7 @@ global_state = {
     "raw_data": None,
     "converted_data": None,
     "normalized_data": None,
+    "init_mask": None,
     "lsta_data": None,
     "merged_data": None,
     "metadata": None,

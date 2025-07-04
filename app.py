@@ -3,6 +3,7 @@ import gradio as gr
 from ui.global_settings import *
 from ui.data_io_page import *
 from ui.dataloader_page import *
+from ui.search_page import *
 from ui.model_page import *
 from ui.train_page import *
 from ui.visualizer_page import *
@@ -43,6 +44,9 @@ with gr.Blocks(title="Open Retina UI", css=css) as demo:
             demo.load(fn=infer_metadata_filename, inputs=[dataloader_dropdown], outputs=metadata_autofill)
             read_button.click(fn=read_and_print_dataloader_info, inputs=dataloader_dropdown, outputs=output_dataloader)
 
+        with gr.Tab("Search"):
+            build_search_ui()
+
         with gr.Tab("Model"):
             build_model_instance_ui()
 
@@ -59,7 +63,7 @@ with gr.Blocks(title="Open Retina UI", css=css) as demo:
             b_exit = gr.Button("Quit Application")
             b_exit.click(exit_app)
 
-        gr.HTML("<div id='custom-footer'>© 2025 Open Retina UI - Version 0.2.3 - Powered by Flyingfish812</div>")
+        gr.HTML("<div id='custom-footer'>© 2025 Open Retina UI - Version 0.3.0 - Powered by Flyingfish812</div>")
 
 if __name__ == "__main__":
     demo.launch(server_name="127.0.0.1", server_port=7860, inbrowser=True, favicon_path=favicon_abs_path)

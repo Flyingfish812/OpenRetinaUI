@@ -105,7 +105,7 @@ def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: boo
                         retain_graph=True,
                         only_inputs=True,
                     )[0]  # [B, C, H, W]
-                    grads *= test_std
+                    # grads *= test_std
                     lsta_per_neuron[neuron_idx].append(grads.detach().cpu())
             else:
                 # 3D case: [1, T, N] -> [T, N]
@@ -122,7 +122,7 @@ def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: boo
                         retain_graph=True,
                         only_inputs=True,
                     )[0]  # [1, C, T, H, W]
-                    grads *= test_std
+                    # grads *= test_std
                     lsta_per_neuron[neuron_idx].append(grads.squeeze(0).permute(1, 0, 2, 3).detach().cpu())
 
             # shape: [B, N] or [T, N]

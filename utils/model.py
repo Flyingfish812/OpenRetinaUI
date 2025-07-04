@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from typing import Iterable, Optional, Any
+from typing import Iterable, Optional, Union, Any
 from utils.activations import build_activation_layer
 from openretina.modules.core.base_core import Core
 from openretina.modules.readout.base import Readout
@@ -38,6 +38,76 @@ class ZeroLoss(nn.Module):
     def forward(self, output, target):
         return torch.tensor(0.0, device=output.device)
 
+class L1Smooth2DRegularizer:
+    def __init__(
+        self,
+        sparsity_factor=1e-4,
+        smoothness_factor=1e-4,
+        padding_mode='constant',
+        center_mass_factor=1e-2,  # 质心正则强度
+        target_center=(0.6, 0.5)  # 目标中心位置 (cy, cx)，单位为比例
+    ):
+        self.sparsity_factor = sparsity_factor
+        self.smoothness_factor = smoothness_factor
+        self.padding_mode = padding_mode
+        self.center_mass_factor = center_mass_factor
+        self.target_center = target_center
+
+        # Laplacian kernel (3x3)
+        self.registered_kernel = torch.tensor(
+            [[0.25, 0.5, 0.25],
+             [0.5, -3.0, 0.5],
+             [0.25, 0.5, 0.25]],
+            dtype=torch.float32
+        ).view(1, 1, 3, 3)  # shape: (1, 1, 3, 3)
+
+    def __call__(self, weights: torch.Tensor) -> torch.Tensor:
+        # weights shape: [out_channels, in_channels, H, W]
+        reg = torch.tensor(0.0, device=weights.device)
+
+        # L1 sparsity
+        if self.sparsity_factor:
+            reg += self.sparsity_factor * torch.sum(torch.abs(weights))
+
+        # Smoothness via Laplacian
+        if self.smoothness_factor:
+            w = weights.permute(1, 0, 2, 3)  # [in, out, H, W]
+            B, C, H, W = w.shape
+            w = w.reshape(-1, 1, H, W)  # [B*C, 1, H, W]
+
+            pad = nn.ReflectionPad2d(1) if self.padding_mode == 'symmetric' else nn.ConstantPad2d(1, 0.0)
+            w_pad = pad(w).expand(-1, w.shape[0], -1, -1)
+
+            lap_kernel = self.registered_kernel.to(weights.device)
+            lap_kernel = lap_kernel.repeat(w.shape[0], 1, 1, 1)
+
+            x_lap = F.conv2d(w_pad, lap_kernel, groups=w.shape[0])
+            tmp1 = torch.sum(x_lap ** 2, dim=(1, 2, 3))
+            tmp2 = 1e-8 + torch.sum(w ** 2, dim=(1, 2, 3))
+            smoothness_reg = torch.sum(tmp1 / tmp2)
+            reg += self.smoothness_factor * smoothness_reg.sqrt()
+
+        # Center of mass regularization
+        if self.center_mass_factor > 0:
+            # Use sum-of-squares as "intensity"
+            norm_weights = weights.pow(2).sum(dim=1)  # [out_channels, H, W]
+            B, H, W = norm_weights.shape
+
+            y = torch.linspace(0, 1, H, device=weights.device).view(1, H, 1)
+            x = torch.linspace(0, 1, W, device=weights.device).view(1, 1, W)
+
+            total = norm_weights.sum(dim=(1, 2), keepdim=True) + 1e-8
+            mass = norm_weights / total
+
+            cy = (mass * y).sum(dim=(1, 2))  # [out_channels]
+            cx = (mass * x).sum(dim=(1, 2))  # [out_channels]
+
+            d_center = (cy - self.target_center[0]) ** 2 + (cx - self.target_center[1]) ** 2
+            center_reg = d_center.mean()
+            reg += self.center_mass_factor * center_reg
+
+        return reg
+
 class KlindtCoreWrapper2D(Core):
     def __init__(
         self,
@@ -46,12 +116,15 @@ class KlindtCoreWrapper2D(Core):
         kernel_sizes: Iterable[int | Iterable[int]],
         num_kernels: Iterable[int],
         act_fns: Iterable[str],
-        reg: Iterable[float],
+        # reg: Iterable[float],
+        smothness_reg: float,
+        sparsity_reg: float,
+        center_mass_reg: float,
         init_scales: np.ndarray,
         kernel_constraint: Optional[str] = None,
         batch_norm: bool = True,
         bn_cent: bool = False,
-        # dropout_rate: float = 0.0,
+        dropout_rate: float = 0.0,
         seed: Optional[int] = None,
     ):
         super().__init__()
@@ -70,13 +143,13 @@ class KlindtCoreWrapper2D(Core):
         
         self.num_kernels = num_kernels
         self.act_fns = act_fns
-        self.reg = reg
+        self.reg = [smothness_reg, sparsity_reg, center_mass_reg]
         self.kernel_constraint = kernel_constraint
 
         self.conv_layers = nn.ModuleList()
         self.bn_layers = nn.ModuleList() if batch_norm else None
         self.activation_layers = nn.ModuleList()
-        self.dropout = nn.Dropout(p=self.reg[3])
+        self.dropout = nn.Dropout(p=dropout_rate) if dropout_rate > 0 else nn.Identity()
 
         input_channels = image_channels
         # build 2D conv stack
@@ -90,7 +163,15 @@ class KlindtCoreWrapper2D(Core):
                 bias=not batch_norm
             )
 
-            nn.init.normal_(conv.weight, mean=init_scales[0][0], std=init_scales[0][1])
+            # nn.init.normal_(conv.weight, mean=init_scales[0][0], std=init_scales[0][1])
+            with torch.no_grad():
+                weight = conv.weight
+                size = weight.shape
+                tmp = weight.new_empty(size + (4,)).normal_()  # 扩展维度采样多个备选值
+                valid = (tmp < 2) & (tmp > -2)  # 只接受 [-2σ, +2σ] 范围内的值
+                ind = valid.max(-1, keepdim=True)[1]  # 找出有效值的位置
+                selected = tmp.gather(-1, ind).squeeze(-1)
+                weight.copy_(selected.mul(init_scales[0][1]).add_(init_scales[0][0]))  # scale + shift
 
             if kernel_constraint == 'norm':
                 with torch.no_grad():
@@ -105,12 +186,18 @@ class KlindtCoreWrapper2D(Core):
                         num_features=k_num,
                         affine=bn_cent,
                         track_running_stats=True,
-                        momentum=0.002
+                        momentum=0.02
                     )
                 )
             input_channels = k_num
 
             self.activation_layers.append(build_activation_layer(act_fn))
+        
+        self.regularizer_module = L1Smooth2DRegularizer(
+            sparsity_factor=self.reg[1],
+            smoothness_factor=self.reg[0],
+            center_mass_factor=self.reg[2],
+        )
 
     def apply_constraints(self):
         if self.kernel_constraint == 'norm':
@@ -133,15 +220,19 @@ class KlindtCoreWrapper2D(Core):
         return x
 
     def regularizer(self) -> torch.Tensor:
-        kernel_reg = sum(torch.sum(conv.weight**2) for conv in self.conv_layers)
-        return kernel_reg * self.reg[0]
+        # kernel_reg = sum(torch.sum(conv.weight) for conv in self.conv_layers)
+        laplacian_reg = self.regularizer_module(self.conv_layers[-1].weight)
+        # return kernel_reg * self.reg[0]
+        return laplacian_reg
 
 class KlindtReadoutWrapper2D(Readout):
     def __init__(
         self,
         num_kernels: Iterable[int],
         num_neurons: int,
-        reg: Iterable[float],
+        # reg: Iterable[float],
+        mask_reg: float,
+        weights_reg: float,
         mask_size: int | Iterable[int], # int or (h,w)
         final_relu: bool = False,
         weights_constraint: Optional[str] = None,
@@ -153,7 +244,7 @@ class KlindtReadoutWrapper2D(Readout):
         super().__init__()
 
         self.num_neurons = num_neurons
-        self.reg = reg
+        self.reg = [mask_reg, weights_reg]
         self.mask_size = mask_size
         self.final_relu = final_relu
         self.weights_constraint = weights_constraint
@@ -170,7 +261,20 @@ class KlindtReadoutWrapper2D(Readout):
 
         # Initialize mask weights
         if init_mask is not None:
-            self.mask_weights = nn.Parameter(init_mask)
+            num_neurons = init_mask.shape[0]
+            h, w = self.mask_size
+            H, W = init_mask.shape[2], init_mask.shape[3]
+            h_offset = (H - h) // 2
+            w_offset = (W - w) // 2
+
+            # Crop center region
+            cropped = init_mask[:, :, h_offset:h_offset + h, w_offset:w_offset + w]  # shape: (num_neurons, 1, h, w)
+
+            # Reshape to (num_mask_pixels, num_neurons)
+            reshaped = cropped.reshape(num_neurons, -1).T  # shape: (h*w, num_neurons)
+
+            # Convert to tensor and register as parameter
+            self.mask_weights = nn.Parameter(torch.tensor(reshaped, dtype=torch.float32))
         else:
             assert init_scales is not None, "Either init_mask or init_scales must be provided"
             mean, std = init_scales[1]
@@ -242,8 +346,8 @@ class KlindtReadoutWrapper2D(Readout):
         return output
 
     def regularizer(self, data_key: str) -> torch.Tensor:
-        mask_reg = torch.mean(torch.sum(torch.abs(self.mask_weights), dim=0)) * self.reg[1]
-        weights_reg = torch.mean(torch.sum(torch.abs(self.readout_weights), dim=0)) * self.reg[2]
+        mask_reg = torch.mean(torch.sum(torch.abs(self.mask_weights), dim=0)) * self.reg[0]
+        weights_reg = torch.mean(torch.sum(torch.abs(self.readout_weights), dim=0)) * self.reg[1]
         return mask_reg + weights_reg
 
 class KlindtCoreReadout2D(BaseCoreReadout):
@@ -255,12 +359,15 @@ class KlindtCoreReadout2D(BaseCoreReadout):
         kernel_sizes: Iterable[int | Iterable[int]],
         num_kernels: Iterable[int],
         act_fns: Iterable[str],
-        reg: Iterable[float],
+        # reg: Iterable[Iterable[float]],  # [smoothness, sparsity, mask_reg, weights_reg, dropout_rate]
         init_scales: Iterable[Iterable[float]],  # 3x2 matrix: [kernel, mask, weights] x [mean, std]
+        smothness_reg: float = 1e0,
+        sparsity_reg: float = 1e-1,
+        center_mass_reg: float = 0,
         kernel_constraint: Optional[str] = None,
         batch_norm: bool = True,
         bn_cent: bool = False,
-        # dropout_rate: float = 0.0,
+        dropout_rate: float = 0.2,
         seed: Optional[int] = None,
         # Readout parameters
         num_neurons: int = 1,
@@ -269,6 +376,8 @@ class KlindtCoreReadout2D(BaseCoreReadout):
         mask_constraint: Optional[str] = None,
         init_mask: Optional[torch.Tensor] = None,
         init_weights: Optional[torch.Tensor] = None,
+        mask_reg: float = 1e-3,
+        weights_reg: float = 1e-1,
         # Common parameters
         loss: nn.Module | None = nn.PoissonNLLLoss(log_input = False),
         correlation_loss: nn.Module | None = CorrelationLoss2D(),
@@ -281,12 +390,15 @@ class KlindtCoreReadout2D(BaseCoreReadout):
             kernel_sizes=kernel_sizes,
             num_kernels=num_kernels,
             act_fns=act_fns,
-            reg=reg,
+            # reg=regs,
+            smothness_reg=smothness_reg,
+            sparsity_reg=sparsity_reg,
+            center_mass_reg=center_mass_reg,
             init_scales=init_scales,
             kernel_constraint=kernel_constraint,
             batch_norm=batch_norm,
             bn_cent=bn_cent,
-            # dropout_rate=dropout_rate,
+            dropout_rate=dropout_rate,
             seed=seed,
         )
 
@@ -307,7 +419,9 @@ class KlindtCoreReadout2D(BaseCoreReadout):
         readout = KlindtReadoutWrapper2D(
             num_kernels=num_kernels,
             num_neurons=num_neurons,
-            reg=reg,
+            # reg=regs,
+            mask_reg=mask_reg,
+            weights_reg=weights_reg,
             mask_size=mask_size,
             final_relu=final_relu,
             weights_constraint=weights_constraint,

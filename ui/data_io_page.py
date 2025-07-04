@@ -60,6 +60,7 @@ def step_convert_format():
     try:
         converted = convert_format(global_state["raw_data"])
         global_state["converted_data"] = converted
+        global_state["init_mask"] = converted.get("mask", None)
 
         info = []
         info.append(f"Training size: {converted['images_train'].shape}")
@@ -81,7 +82,7 @@ def step_normalize():
     if global_state["converted_data"] is None:
         return append_log_dataio("❌ 请先执行格式转换")
     try:
-        normalized, mean_dict, std_dict = normalize_data(global_state["converted_data"])
+        normalized, _, _ = normalize_data(global_state["converted_data"])
         global_state["normalized_data"] = normalized
         return append_log_dataio("✅ Normalization 成功")
     except Exception as e:

@@ -3,6 +3,7 @@ import numpy as np
 import os
 import pickle
 import yaml
+from torchinfo import summary
 from inspect import signature, _empty
 from typing import get_type_hints
 from ui.global_settings import global_state, MODEL_SAVE_DIR
@@ -43,10 +44,16 @@ def extract_model_init_params(model_class):
         params.append((name, ptype, default))
     return params
 
-def cast_value(value, target_type):
+def cast_value(value, name, target_type):
     try:
         if value in ("None", "", None):
             return None
+        if name == "init_mask":
+            if eval(value) is None:
+                return None
+            elif eval(value) == "default":
+                print("Using default init_mask")
+                return global_state.get("init_mask", None)
         if target_type == int:
             return int(value)
         elif target_type == float:
@@ -100,7 +107,7 @@ def trigger_build_model(*args, model_name, input_widgets):
     append_log_model(f"Model name: {model_name}, Model class: {model_class}")
     params = extract_model_init_params(model_class)
     typed_kwargs = {
-        name: cast_value(value, ptype)
+        name: cast_value(value, name, ptype)
         for (name, ptype, _), value in zip(params, args)
     }
     append_log_model(f"\nBuilding models with following parameters: \n{typed_kwargs}")
@@ -112,7 +119,7 @@ def trigger_build_model(*args, model_name, input_widgets):
         # return append_log_model(f"\n❌ Fail to build model: {str(e)}")
 
 def fallback_representer(dumper, data):
-        return dumper.represent_scalar("!str", str(data))
+    return dumper.represent_scalar("!str", str(data))
 
 def save_model_and_settings(filename):
     yaml.SafeDumper.add_multi_representer(object, fallback_representer)
@@ -173,6 +180,16 @@ def load_settings_and_fill(settings_path, model_selector, param_container, input
         return [gr.update()] * (1 + len(input_component_list)) + [
             append_log_model(f"❌ Fail to load settings: {str(e)}")
         ]
+    
+def build_summary(input_size):
+    try:
+        model = global_state.get("model")
+        input_size = cast_value(input_size, "", "tuple")
+        model_stats = summary(model, input_size=input_size, verbose=0)
+        summary_str = str(model_stats)
+        return f"Model summary:\n" + summary_str
+    except Exception as e:
+        return f"Error generating model summary: {str(e)}"
 
 def build_model_instance_ui():
     with gr.Blocks() as model_ui:
@@ -199,6 +216,21 @@ def build_model_instance_ui():
 
         output_log = gr.Textbox(label="Console", lines=12, max_lines=20, show_copy_button=True)
         build_btn = gr.Button("Build Model")
+
+        with gr.Column():
+            with gr.Row():
+                input_size = gr.Textbox(
+                    label="Input Size",
+                    placeholder="(B,C,H,W) for 2D or (B,C,T,H,W) for 3D",
+                    value="(1, 1, 108, 108)"
+                )
+                summary_btn = gr.Button("Build Summary")
+            summary_output = gr.Textbox(label="Model Summary", lines=10, max_lines=20, show_copy_button=True)
+        summary_btn.click(
+            fn=lambda input_size: build_summary(input_size),
+            inputs=[input_size],
+            outputs=summary_output
+        )
 
         with gr.Row():
             save_name = gr.Textbox(label="Save as", placeholder="ex. my_model")

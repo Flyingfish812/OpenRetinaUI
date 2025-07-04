@@ -67,3 +67,9 @@ LNLN model enabled.
 - 2025/06/24
 
 LSTA plot optimized.
+
+## Version 0.3.0
+
+- 2025/07/04
+
+Parameter search implemented
