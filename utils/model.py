@@ -341,7 +341,8 @@ class KlindtReadoutWrapper2D(Readout):
         output = (masked * self.readout_weights.T.unsqueeze(0)).sum(dim=2)  # → [B, N]
 
         if self.final_relu:
-            output = F.relu(output + self.bias)  # → [B, N]
+            # output = F.relu(output + self.bias)  # → [B, N]
+            output = F.softplus(output + self.bias)  # → [B, N]
 
         return output
 
