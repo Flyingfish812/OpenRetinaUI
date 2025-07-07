@@ -86,10 +86,12 @@ def compute_evaluation_metrics(model, dataloader_dict, response_data, is_2d: boo
             inputs = data_point.inputs.to(device)  # 2d: [B, C, H, W]; 3d: [1, C, T, H, W]
             inputs.requires_grad_(True)
             outputs = model(inputs)
-            print("Mean response:", outputs.mean().item())
-            print("Std response:", outputs.std().item())
             preds = outputs.detach().cpu()
             targets = data_point.targets  # 2d: [B, num_neurons]; 3d: [1, T, num_neurons]
+            print("Mean response:", outputs.mean().item())
+            print("Std response:", outputs.std().item())
+            print("Mean target:", targets.mean().item())
+            print("Std target:", targets.std().item())
 
             if lsta_per_neuron is None:
                 num_neurons = outputs.shape[-1]

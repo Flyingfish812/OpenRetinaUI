@@ -144,40 +144,40 @@ def convert_format(data: dict) -> dict:
         else:
             raise ValueError("Unsupported test response shape.")
     
-    x = converted["images_train"]
-    y = converted["responses_train"]
+    # x = converted["images_train"]
+    # y = converted["responses_train"]
 
-    x = np.transpose(x, (1, 0, 2, 3))
-    B, C, H, W = x.shape
-    N = y.shape[0]
+    # x = np.transpose(x, (1, 0, 2, 3))
+    # B, C, H, W = x.shape
+    # N = y.shape[0]
 
-    # Compute spike-triggered average: shape [N, C, H, W]
-    x_flat = x.reshape(B, -1)  # [B, C*H*W]
-    x_norm = (x_flat - np.mean(x_flat)) / np.std(x_flat)
-    y_norm = (y - np.mean(y, axis=1, keepdims=True)) / np.std(y, axis=1, keepdims=True)
-    sta = y_norm @ x_norm  # [N, C*H*W]
-    sta = sta.reshape(N, C, H, W)
+    # # Compute spike-triggered average: shape [N, C, H, W]
+    # x_flat = x.reshape(B, -1)  # [B, C*H*W]
+    # x_norm = (x_flat - np.mean(x_flat)) / np.std(x_flat)
+    # y_norm = (y - np.mean(y, axis=1, keepdims=True)) / np.std(y, axis=1, keepdims=True)
+    # sta = y_norm @ x_norm  # [N, C*H*W]
+    # sta = sta.reshape(N, C, H, W)
 
-    # Smooth each STA with a 21x21 mean kernel
-    kernel = np.ones((21, 21), dtype=np.float32) / (21 * 21)
-    sta_smooth = np.zeros_like(sta)
-    for n in range(N):
-        for c in range(C):
-            sta_smooth[n, c] = convolve2d(sta[n, c], kernel, mode='same', boundary='symm')
+    # # Smooth each STA with a 21x21 mean kernel
+    # kernel = np.ones((21, 21), dtype=np.float32) / (21 * 21)
+    # sta_smooth = np.zeros_like(sta)
+    # for n in range(N):
+    #     for c in range(C):
+    #         sta_smooth[n, c] = convolve2d(sta[n, c], kernel, mode='same', boundary='symm')
 
-    # Find max position on the first channel as center
-    center_positions = [np.unravel_index(np.argmax(sta_smooth[n, 0]), (H, W)) for n in range(N)]
+    # # Find max position on the first channel as center
+    # center_positions = [np.unravel_index(np.argmax(sta_smooth[n, 0]), (H, W)) for n in range(N)]
 
-    # Build mask with Gaussian noise and add response std at center
-    stddev = 0.001
-    mask = np.abs(stddev * np.random.randn(N, C, H, W))  # truncated normal init
+    # # Build mask with Gaussian noise and add response std at center
+    # stddev = 0.001
+    # mask = np.abs(stddev * np.random.randn(N, C, H, W))  # truncated normal init
 
-    y_std = np.std(y, axis=1)  # [N]
-    for n, (i, j) in enumerate(center_positions):
-        if 0 <= i < H and 0 <= j < W:
-            mask[n, :, i, j] += y_std[n]
+    # y_std = np.std(y, axis=1)  # [N]
+    # for n, (i, j) in enumerate(center_positions):
+    #     if 0 <= i < H and 0 <= j < W:
+    #         mask[n, :, i, j] += y_std[n]
     
-    converted["mask"] = mask.astype(np.float32)
+    # converted["mask"] = mask.astype(np.float32)
 
     return converted
 
@@ -220,56 +220,57 @@ def normalize_data(data: dict) -> Tuple[dict, dict, dict]:
             # mean_dict[key] = means
             # std_dict[key] = stds
 
-            means = arr.mean()
-            std = arr.std(ddof=1)
-            normalized[key] = (arr - means) / std
-            mean_dict[key] = means
-            std_dict[key] = std
+            # means = arr.mean()
+            # std = arr.std(ddof=1)
+            # normalized[key] = (arr - means) / std
+            # mean_dict[key] = means
+            # std_dict[key] = std
 
-            # normalized[key] = arr
+            normalized[key] = arr
 
         # 响应数据处理（整体归一化）
         elif key.startswith("responses_") and arr.ndim == 2:
             # Per-dimension std
-            std = arr.std(axis=1, keepdims=True, ddof=1)
-            mean_std = std.mean()
-            std[std < (mean_std / 100)] = 1.0
+            # std = arr.std(axis=1, keepdims=True, ddof=1)
+            # mean_std = std.mean()
+            # std[std < (mean_std / 100)] = 1.0
 
-            # Clamp to positive and normalize
-            arr = np.clip(arr, a_min=0, a_max=None)
-            normalized[key] = (arr / std).astype(np.float32)
+            # # Clamp to positive and normalize
+            # arr = np.clip(arr, a_min=0, a_max=None)
+            # normalized[key] = (arr / std).astype(np.float32)
 
-            mean_dict[key] = np.zeros_like(std, dtype=np.float32)  # 不减 mean
-            std_dict[key] = std.astype(np.float32)
+            # mean_dict[key] = np.zeros_like(std, dtype=np.float32)  # 不减 mean
+            # std_dict[key] = std.astype(np.float32)
 
-            # normalized[key] = arr
+            normalized[key] = arr
 
         elif key == "responses_test_by_trial":
             # [T, N, trial]
-            arr = arr.astype(np.float32)
-            # T, N, R = arr.shape
+            # arr = arr.astype(np.float32)
+            # # T, N, R = arr.shape
 
-            # Step 1: Clamp to positive
-            arr = np.clip(arr, a_min=0, a_max=None)
+            # # Step 1: Clamp to positive
+            # arr = np.clip(arr, a_min=0, a_max=None)
 
-            # Step 2: Normalize across trials (each trial treated independently)
-            std = arr.std(axis=2, keepdims=True, ddof=1)  # shape: [T, N]
-            mean_std = std.mean()
-            std[std < (mean_std / 100)] = 1.0
+            # # Step 2: Normalize across trials (each trial treated independently)
+            # std = arr.std(axis=2, keepdims=True, ddof=1)  # shape: [T, N]
+            # mean_std = std.mean()
+            # std[std < (mean_std / 100)] = 1.0
 
-            arr_norm = arr / std  # shape [T, N, trial]
+            # arr_norm = arr / std  # shape [T, N, trial]
 
-            normalized[key] = arr_norm.astype(np.float32)
+            # normalized[key] = arr_norm.astype(np.float32)
 
-            # Step 3: After normalization, compute mean across trials → [T, N]
-            mean_resp = arr_norm.mean(axis=2)  # → [T, N]
-            normalized["responses_test"] = mean_resp.T.astype(np.float32)  # [N, T]
+            # # Step 3: After normalization, compute mean across trials → [T, N]
+            # mean_resp = arr_norm.mean(axis=2)  # → [T, N]
+            # normalized["responses_test"] = mean_resp.T.astype(np.float32)  # [N, T]
 
-            mean_dict["responses_test"] = np.zeros_like(std.T, dtype=np.float32)
-            std_dict["responses_test"] = std.T.astype(np.float32)
+            # mean_dict["responses_test"] = np.zeros_like(std.T, dtype=np.float32)
+            # std_dict["responses_test"] = std.T.astype(np.float32)
 
-            # mean_resp = arr.mean(axis=2)  # [T, N]
-            # normalized["responses_test"] = mean_resp.T.astype(np.float32)
+            mean_resp = arr.mean(axis=2)  # [T, N]
+            normalized[key] = arr
+            normalized["responses_test"] = mean_resp.T.astype(np.float32)
 
         # 其他数据直接保留
         else:

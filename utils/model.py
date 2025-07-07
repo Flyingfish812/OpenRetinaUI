@@ -85,7 +85,8 @@ class L1Smooth2DRegularizer:
             tmp1 = torch.sum(x_lap ** 2, dim=(1, 2, 3))
             tmp2 = 1e-8 + torch.sum(w ** 2, dim=(1, 2, 3))
             smoothness_reg = torch.sum(tmp1 / tmp2)
-            reg += self.smoothness_factor * smoothness_reg.sqrt()
+            # reg += self.smoothness_factor * smoothness_reg.sqrt()
+            reg += self.smoothness_factor * smoothness_reg
 
         # Center of mass regularization
         if self.center_mass_factor > 0:
@@ -212,11 +213,12 @@ class KlindtCoreWrapper2D(Core):
         x = self.dropout(x)
         for i, conv in enumerate(self.conv_layers):
             x = conv(x)
+            x = self.activation_layers[i](x)
             if self.bn_layers is not None:
                 x = self.bn_layers[i](x)
             # if self.act_fns[i] == 'relu':
                 # x = F.relu(x)
-            x = self.activation_layers[i](x)
+            
         return x
 
     def regularizer(self) -> torch.Tensor:
@@ -300,7 +302,7 @@ class KlindtReadoutWrapper2D(Readout):
                 # requires_grad=True
             )
 
-        self.bias = nn.Parameter(torch.zeros(num_neurons)) if final_relu else None
+        self.bias = nn.Parameter(torch.full((num_neurons,), 0.5)) if final_relu else None
 
     def apply_constraints(self):
         if self.mask_constraint == 'abs':
@@ -444,3 +446,30 @@ class KlindtCoreReadout2D(BaseCoreReadout):
 
         # Save all hyperparameters for reproducibility
         self.save_hyperparameters()
+
+def load_tf_weights_into_model(model, core_path, mask_path, readout_path):
+    core_tf = np.load(core_path)
+    core_torch = core_tf.transpose(2, 0, 1)[..., np.newaxis]  # → (4, 31, 31, 1)
+    core_torch = np.transpose(core_torch, (0, 3, 1, 2))       # → (4, 1, 31, 31)
+    core_tensor = torch.tensor(core_torch, dtype=torch.float32)
+    print("core_tensor.shape:", core_tensor.shape)
+    
+    mask = torch.tensor(np.load(mask_path), dtype=torch.float32)
+    mask_flat = mask.reshape(41, -1).T  # shape: (6084, 41)
+    mask_tensor = torch.tensor(mask_flat, dtype=torch.float32)
+    print("mask.shape:", mask.shape)
+    readout = torch.tensor(np.load(readout_path), dtype=torch.float32)
+    readout_tensor = readout.T  # shape: (6084, 41)
+    print("readout.shape:", readout.shape)
+
+    with torch.no_grad():
+        model.core.conv_layers[0].weight.copy_(core_tensor)
+        print("Core weight insert complete")
+        model.readout.mask_weights.copy_(mask_tensor)
+        print("Mask weight insert complete")
+        model.readout.readout_weights.copy_(readout_tensor)
+        print("Readout weight insert complete")
+
+def backup(model):
+    load_tf_weights_into_model(model, "plots_ans/convolutional_kernels.npy", "plots_ans/spatial_masks.npy", "plots_ans/feature_weights.npy")
+    print("Backup complete")
