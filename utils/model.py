@@ -45,7 +45,7 @@ class L1Smooth2DRegularizer:
         smoothness_factor=1e-4,
         padding_mode='constant',
         center_mass_factor=1e-2,  # 质心正则强度
-        target_center=(0.6, 0.5)  # 目标中心位置 (cy, cx)，单位为比例
+        target_center=(0.5, 0.5)  # 目标中心位置 (cy, cx)，单位为比例
     ):
         self.sparsity_factor = sparsity_factor
         self.smoothness_factor = smoothness_factor
@@ -122,6 +122,7 @@ class KlindtCoreWrapper2D(Core):
         sparsity_reg: float,
         center_mass_reg: float,
         init_scales: np.ndarray,
+        init_kernels: Optional[str] = None,
         kernel_constraint: Optional[str] = None,
         batch_norm: bool = True,
         bn_cent: bool = False,
@@ -165,29 +166,31 @@ class KlindtCoreWrapper2D(Core):
             )
 
             # nn.init.normal_(conv.weight, mean=init_scales[0][0], std=init_scales[0][1])
-            # with torch.no_grad():
-            #     weight = conv.weight
-            #     size = weight.shape
-            #     tmp = weight.new_empty(size + (4,)).normal_()  # 扩展维度采样多个备选值
-            #     valid = (tmp < 2) & (tmp > -2)  # 只接受 [-2σ, +2σ] 范围内的值
-            #     ind = valid.max(-1, keepdim=True)[1]  # 找出有效值的位置
-            #     selected = tmp.gather(-1, ind).squeeze(-1)
-            #     weight.copy_(selected.mul(init_scales[0][1]).add_(init_scales[0][0]))  # scale + shift
-            with torch.no_grad():
-                weight = conv.weight  # shape: [out_channels, in_channels, H, W]
-                out_c, in_c, H, W = weight.shape
+            if init_kernels == "gaussian":
+                with torch.no_grad():
+                    weight = conv.weight  # shape: [out_channels, in_channels, H, W]
+                    out_c, in_c, H, W = weight.shape
 
-                # Step 1: 生成一个二维的中心偏下的高斯模板
-                yy, xx = torch.meshgrid(torch.linspace(-1, 1, H), torch.linspace(-1, 1, W), indexing='ij')
-                sigma = 0.4  # 控制感受野范围（可调）
-                shift_y = 0.2  # 将中心往下偏移一点
+                    # Step 1: 生成一个二维的中心偏下的高斯模板
+                    yy, xx = torch.meshgrid(torch.linspace(-1, 1, H), torch.linspace(-1, 1, W), indexing='ij')
+                    sigma = 0.2  # 控制感受野范围（可调）
+                    shift_y = 0.0 # 将中心往下偏移一点
 
-                gaussian = torch.exp(-((xx**2 + ((yy - shift_y) ** 2)) / (2 * sigma ** 2)))  # shape: [H, W]
-                gaussian = gaussian / gaussian.max()  # normalize to [0, 1]
+                    gaussian = torch.exp(-((xx**2 + ((yy - shift_y) ** 2)) / (2 * sigma ** 2)))  # shape: [H, W]
+                    gaussian = gaussian / gaussian.max()  # normalize to [0, 1]
 
-                # Step 2: 每个 kernel 初始化为高斯模板 × N(0, std)
-                init_noise = torch.randn_like(weight)
-                weight.copy_(init_noise * gaussian * init_scales[0][1])  # 保持 std 控制
+                    # Step 2: 每个 kernel 初始化为高斯模板 × N(0, std)
+                    init_noise = torch.randn_like(weight)
+                    weight.copy_(init_noise * gaussian * init_scales[0][1])  # 保持 std 控制
+            else:
+                with torch.no_grad():
+                    weight = conv.weight
+                    size = weight.shape
+                    tmp = weight.new_empty(size + (4,)).normal_()  # 扩展维度采样多个备选值
+                    valid = (tmp < 2) & (tmp > -2)  # 只接受 [-2σ, +2σ] 范围内的值
+                    ind = valid.max(-1, keepdim=True)[1]  # 找出有效值的位置
+                    selected = tmp.gather(-1, ind).squeeze(-1)
+                    weight.copy_(selected.mul(init_scales[0][1]).add_(init_scales[0][0]))  # scale + shift
 
             if kernel_constraint == 'norm':
                 with torch.no_grad():
@@ -382,6 +385,7 @@ class KlindtCoreReadout2D(BaseCoreReadout):
         smothness_reg: float = 1e0,
         sparsity_reg: float = 1e-1,
         center_mass_reg: float = 0,
+        init_kernels: Optional[str] = None,
         kernel_constraint: Optional[str] = None,
         batch_norm: bool = True,
         bn_cent: bool = False,
@@ -413,6 +417,7 @@ class KlindtCoreReadout2D(BaseCoreReadout):
             sparsity_reg=sparsity_reg,
             center_mass_reg=center_mass_reg,
             init_scales=init_scales,
+            init_kernels=init_kernels,
             kernel_constraint=kernel_constraint,
             batch_norm=batch_norm,
             bn_cent=bn_cent,
@@ -462,6 +467,7 @@ class KlindtCoreReadout2D(BaseCoreReadout):
         # Save all hyperparameters for reproducibility
         self.save_hyperparameters()
 
+# 后门函数
 def load_tf_weights_into_model(model, core_path, mask_path, readout_path):
     core_tf = np.load(core_path)
     core_torch = core_tf.transpose(2, 0, 1)[..., np.newaxis]  # → (4, 31, 31, 1)
