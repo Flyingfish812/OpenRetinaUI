@@ -165,14 +165,29 @@ class KlindtCoreWrapper2D(Core):
             )
 
             # nn.init.normal_(conv.weight, mean=init_scales[0][0], std=init_scales[0][1])
+            # with torch.no_grad():
+            #     weight = conv.weight
+            #     size = weight.shape
+            #     tmp = weight.new_empty(size + (4,)).normal_()  # 扩展维度采样多个备选值
+            #     valid = (tmp < 2) & (tmp > -2)  # 只接受 [-2σ, +2σ] 范围内的值
+            #     ind = valid.max(-1, keepdim=True)[1]  # 找出有效值的位置
+            #     selected = tmp.gather(-1, ind).squeeze(-1)
+            #     weight.copy_(selected.mul(init_scales[0][1]).add_(init_scales[0][0]))  # scale + shift
             with torch.no_grad():
-                weight = conv.weight
-                size = weight.shape
-                tmp = weight.new_empty(size + (4,)).normal_()  # 扩展维度采样多个备选值
-                valid = (tmp < 2) & (tmp > -2)  # 只接受 [-2σ, +2σ] 范围内的值
-                ind = valid.max(-1, keepdim=True)[1]  # 找出有效值的位置
-                selected = tmp.gather(-1, ind).squeeze(-1)
-                weight.copy_(selected.mul(init_scales[0][1]).add_(init_scales[0][0]))  # scale + shift
+                weight = conv.weight  # shape: [out_channels, in_channels, H, W]
+                out_c, in_c, H, W = weight.shape
+
+                # Step 1: 生成一个二维的中心偏下的高斯模板
+                yy, xx = torch.meshgrid(torch.linspace(-1, 1, H), torch.linspace(-1, 1, W), indexing='ij')
+                sigma = 0.4  # 控制感受野范围（可调）
+                shift_y = 0.2  # 将中心往下偏移一点
+
+                gaussian = torch.exp(-((xx**2 + ((yy - shift_y) ** 2)) / (2 * sigma ** 2)))  # shape: [H, W]
+                gaussian = gaussian / gaussian.max()  # normalize to [0, 1]
+
+                # Step 2: 每个 kernel 初始化为高斯模板 × N(0, std)
+                init_noise = torch.randn_like(weight)
+                weight.copy_(init_noise * gaussian * init_scales[0][1])  # 保持 std 控制
 
             if kernel_constraint == 'norm':
                 with torch.no_grad():
