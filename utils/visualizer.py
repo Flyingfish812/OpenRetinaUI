@@ -557,7 +557,7 @@ def plot_convolutional_kernels(model, is_2d=False, channels=None, time_frames=No
 
             for i, ax in enumerate(axes):
                 if i < n_kernels:
-                    ax.imshow(kernel_slices[i], cmap="RdBu_r", vmin=-vlim, vmax=+vlim)
+                    ax.imshow(kernel_slices[i], interpolation='bicubic', cmap="RdBu_r", vmin=-vlim, vmax=+vlim)
                     ax.set_xticks([])
                     ax.set_yticks([])
                 else:
@@ -609,7 +609,7 @@ def plot_spatial_masks(model, cell_indices=None):
 
     for i, ax in enumerate(axes):
         if i < n_cells:
-            ax.imshow(selected_weights[i], cmap='gray', vmin=vmin, vmax=vmax)
+            ax.imshow(selected_weights[i], interpolation='bicubic', cmap='gray', vmin=vmin, vmax=vmax)
             ax.set_xticks([])
             ax.set_yticks([])
         else:
