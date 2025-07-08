@@ -97,23 +97,29 @@ class L1Smooth2DRegularizer:
             y = torch.linspace(0, 1, H, device=weights.device).view(1, H, 1)
             x = torch.linspace(0, 1, W, device=weights.device).view(1, 1, W)
 
+            # Normalize energy
             total = norm_weights.sum(dim=(1, 2), keepdim=True) + 1e-8
-            mass = norm_weights / total
+            mass = norm_weights / total  # [B, H, W]
 
-            # Center of mass calculation
-            cy = (mass * y).sum(dim=(1, 2))  # [out_channels]
-            cx = (mass * x).sum(dim=(1, 2))  # [out_channels]
+            # === 1. Center alignment ===
+            cy = (mass * y).sum(dim=(1, 2))  # [B]
+            cx = (mass * x).sum(dim=(1, 2))  # [B]
             d_center = (cy - self.target_center[0]) ** 2 + (cx - self.target_center[1]) ** 2
             center_reg = d_center.mean()
 
-            # Distribution compactness
+            # === 2. Compactness via max distance from center ===
             dist2 = ((y - cy.view(-1, 1, 1)) ** 2 + (x - cx.view(-1, 1, 1)) ** 2)
-            compactness = (mass * dist2).sum(dim=(1, 2))  # 每个核的分布方差
+            compactness = (mass * dist2).sum(dim=(1, 2))  # [B]
             compactness_reg = compactness.mean()
 
-            # Sum up all regularization terms
-            reg += self.center_mass_factor * center_reg
-            reg += self.center_mass_factor * compactness_reg
+            # === 3. Peak dominance penalty ===
+            max_val = norm_weights.view(B, -1).max(dim=1)[0]  # [B]
+            mean_val = norm_weights.view(B, -1).mean(dim=1)   # [B]
+            peakness = mean_val / (max_val + 1e-8)  # want this to be small
+            peakness_reg = peakness.mean()
+
+            # === Combine ===
+            reg += self.center_mass_factor * (center_reg + compactness_reg + peakness_reg)
 
         return reg
 
