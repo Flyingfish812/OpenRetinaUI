@@ -100,12 +100,20 @@ class L1Smooth2DRegularizer:
             total = norm_weights.sum(dim=(1, 2), keepdim=True) + 1e-8
             mass = norm_weights / total
 
+            # Center of mass calculation
             cy = (mass * y).sum(dim=(1, 2))  # [out_channels]
             cx = (mass * x).sum(dim=(1, 2))  # [out_channels]
-
             d_center = (cy - self.target_center[0]) ** 2 + (cx - self.target_center[1]) ** 2
             center_reg = d_center.mean()
+
+            # Distribution compactness
+            dist2 = ((y - cy.view(-1, 1, 1)) ** 2 + (x - cx.view(-1, 1, 1)) ** 2)
+            compactness = (mass * dist2).sum(dim=(1, 2))  # 每个核的分布方差
+            compactness_reg = compactness.mean()
+
+            # Sum up all regularization terms
             reg += self.center_mass_factor * center_reg
+            reg += self.center_mass_factor * compactness_reg
 
         return reg
 
@@ -166,15 +174,21 @@ class KlindtCoreWrapper2D(Core):
             )
 
             # nn.init.normal_(conv.weight, mean=init_scales[0][0], std=init_scales[0][1])
-            if init_kernels == "gaussian":
+            if init_kernels.startswith("gaussian"):
                 with torch.no_grad():
                     weight = conv.weight  # shape: [out_channels, in_channels, H, W]
                     out_c, in_c, H, W = weight.shape
 
+                    # 解析 sigma 参数
+                    try:
+                        sigma_str = init_kernels.split(":")[1]
+                        sigma = float(sigma_str)
+                    except (IndexError, ValueError):
+                        sigma = 0.2  # 默认值
+
                     # Step 1: 生成一个二维的中心偏下的高斯模板
                     yy, xx = torch.meshgrid(torch.linspace(-1, 1, H), torch.linspace(-1, 1, W), indexing='ij')
-                    sigma = 0.2  # 控制感受野范围（可调）
-                    shift_y = 0.0 # 将中心往下偏移一点
+                    shift_y = 0.0  # 如有需要也可以支持 shift_y 参数化
 
                     gaussian = torch.exp(-((xx**2 + ((yy - shift_y) ** 2)) / (2 * sigma ** 2)))  # shape: [H, W]
                     gaussian = gaussian / gaussian.max()  # normalize to [0, 1]
@@ -182,6 +196,7 @@ class KlindtCoreWrapper2D(Core):
                     # Step 2: 每个 kernel 初始化为高斯模板 × N(0, std)
                     init_noise = torch.randn_like(weight)
                     weight.copy_(init_noise * gaussian * init_scales[0][1])  # 保持 std 控制
+
             else:
                 with torch.no_grad():
                     weight = conv.weight
