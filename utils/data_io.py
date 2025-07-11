@@ -98,25 +98,27 @@ class DatasetLoader:
         else:
             return self._extract_from_object(obj)
         
-def convert_format(data: dict) -> dict:
+def convert_format(data: dict, neuron_indices: Optional[list] = None) -> dict:
     """
-    Transform the TensorFlow-style dataset into an Open-retina-style dataset.
-    
+    Transform the TensorFlow-style dataset into an Open-retina-style dataset,
+    with optional neuron selection.
+
     Input:
         data: a dictionary with the following keys:
             - images_train, images_val, images_test: [B, H, W, C]
             - responses_train, responses_val: [B, N]
-            - responses_test: [T, N] or [trials, T, N]
-    
+            - responses_test: [T, N] or [trial, T, N]
+        neuron_indices (list[int], optional): selected neuron indices to keep
+
     Output:
         dict: converted dictionary
-            - Image: [C, T, H, W] or [C, N, H, W]
-            - Response: [N, T]
-            - Trial: [T, N] and [trial, T, N]
+            - images_{split}: [C, T, H, W]
+            - responses_{split}: [N, T] (selected neurons only)
+            - responses_test_by_trial: [T, N, trial] (selected neurons only, if applicable)
     """
     converted = {}
 
-    # 图像部分：BCHW ← BHWC → TCHW（T表示帧/样本数）
+    # 图像部分：BHWC → CBHW（B=T）
     for split in ["train", "val", "test"]:
         key = f"images_{split}"
         if key in data:
@@ -125,59 +127,30 @@ def convert_format(data: dict) -> dict:
             img = img.astype(np.float32)
             converted[key] = img
 
-    # 响应部分：转置为 [N, T]
+    # 响应部分：转置为 [N, T]，并裁剪神经元
     for split in ["train", "val"]:
         key = f"responses_{split}"
         if key in data:
             resp = data[key]  # [B, N]
-            resp = resp.T  # → [N, B]
-            converted[key] = resp.astype(np.float32)
+            if neuron_indices is not None:
+                resp = resp[:, neuron_indices]  # 保留指定神经元
+            resp = resp.T.astype(np.float32)  # → [N, B]
+            converted[key] = resp
 
-    # 测试响应：兼容 [T, N] 或 [trial, T, N]
+    # 测试响应：支持 [T, N] 或 [trial, T, N] → [N, T] 或 [T, N, trial]
     if "responses_test" in data:
         r_test = data["responses_test"]
         if r_test.ndim == 2:
-            converted["responses_test"] = r_test.T.astype(np.float32)  # [T, N] → [N, T]
+            if neuron_indices is not None:
+                r_test = r_test[:, neuron_indices]  # [T, N'] ← [T, N]
+            converted["responses_test"] = r_test.T.astype(np.float32)  # → [N, T]
         elif r_test.ndim == 3:
-            converted["responses_test_by_trial"] = np.transpose(r_test, (1, 2, 0)).astype(np.float32)  # [trial, T, N] → [T, N, trial]
-            # converted["responses_test"] = np.mean(r_test, axis=0).T.astype(np.float32)  # [T, N] → [N, T](trial-avg)
+            if neuron_indices is not None:
+                r_test = r_test[:, :, neuron_indices]  # [trial, T, N'] ← [trial, T, N]
+            r_test = np.transpose(r_test, (1, 2, 0))  # [T, N, trial]
+            converted["responses_test_by_trial"] = r_test.astype(np.float32)
         else:
             raise ValueError("Unsupported test response shape.")
-    
-    # x = converted["images_train"]
-    # y = converted["responses_train"]
-
-    # x = np.transpose(x, (1, 0, 2, 3))
-    # B, C, H, W = x.shape
-    # N = y.shape[0]
-
-    # # Compute spike-triggered average: shape [N, C, H, W]
-    # x_flat = x.reshape(B, -1)  # [B, C*H*W]
-    # x_norm = (x_flat - np.mean(x_flat)) / np.std(x_flat)
-    # y_norm = (y - np.mean(y, axis=1, keepdims=True)) / np.std(y, axis=1, keepdims=True)
-    # sta = y_norm @ x_norm  # [N, C*H*W]
-    # sta = sta.reshape(N, C, H, W)
-
-    # # Smooth each STA with a 21x21 mean kernel
-    # kernel = np.ones((21, 21), dtype=np.float32) / (21 * 21)
-    # sta_smooth = np.zeros_like(sta)
-    # for n in range(N):
-    #     for c in range(C):
-    #         sta_smooth[n, c] = convolve2d(sta[n, c], kernel, mode='same', boundary='symm')
-
-    # # Find max position on the first channel as center
-    # center_positions = [np.unravel_index(np.argmax(sta_smooth[n, 0]), (H, W)) for n in range(N)]
-
-    # # Build mask with Gaussian noise and add response std at center
-    # stddev = 0.001
-    # mask = np.abs(stddev * np.random.randn(N, C, H, W))  # truncated normal init
-
-    # y_std = np.std(y, axis=1)  # [N]
-    # for n, (i, j) in enumerate(center_positions):
-    #     if 0 <= i < H and 0 <= j < W:
-    #         mask[n, :, i, j] += y_std[n]
-    
-    # converted["mask"] = mask.astype(np.float32)
 
     return converted
 

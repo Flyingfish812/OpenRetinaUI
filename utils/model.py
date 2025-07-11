@@ -490,7 +490,7 @@ class KlindtCoreReadout2D(BaseCoreReadout):
         self.save_hyperparameters()
 
 # 后门函数
-def load_tf_weights_into_model(model, core_path, mask_path, readout_path, frozen):
+def load_tf_weights_into_model(model, core_path, mask_path, readout_path, frozen, indices=None):
     core_tf = np.load(core_path)
     core_torch = core_tf.transpose(2, 0, 1)[..., np.newaxis]  # → (4, 31, 31, 1)
     core_torch = np.transpose(core_torch, (0, 3, 1, 2))       # → (4, 1, 31, 31)
@@ -498,12 +498,17 @@ def load_tf_weights_into_model(model, core_path, mask_path, readout_path, frozen
     print("core_tensor.shape:", core_tensor.shape)
 
     mask = torch.tensor(np.load(mask_path), dtype=torch.float32)
-    mask_flat = mask.reshape(41, -1).T  # shape: (6084, 41)
+    if indices is not None:
+        mask = mask[indices]
+        num_neurons = len(indices)
+    mask_flat = mask.reshape(num_neurons, -1).T  # shape: (6084, 41)
     mask_tensor = torch.tensor(mask_flat, dtype=torch.float32)
     print("mask.shape:", mask.shape)
 
     readout = torch.tensor(np.load(readout_path), dtype=torch.float32)
-    readout_tensor = readout.T  # shape: (6084, 41)
+    if indices is not None:
+        readout = readout[indices]
+    readout_tensor = readout.T  # shape: (4, 41)
     print("readout.shape:", readout.shape)
 
     with torch.no_grad():
@@ -526,6 +531,11 @@ def load_tf_weights_into_model(model, core_path, mask_path, readout_path, frozen
         print("Readout weight insert complete and frozen")
 
 
-def backup(model, frozen = True):
-    load_tf_weights_into_model(model, "plots_ans/convolutional_kernels.npy", "plots_ans/spatial_masks.npy", "plots_ans/feature_weights.npy", frozen)
+def backup(model, frozen = True, indices=None):
+    load_tf_weights_into_model(model, 
+                               "plots_ans/convolutional_kernels.npy", 
+                               "plots_ans/spatial_masks.npy", 
+                               "plots_ans/feature_weights.npy", 
+                               frozen, 
+                               indices)
     print("Backup complete")

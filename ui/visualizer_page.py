@@ -57,41 +57,41 @@ def list_metrics_files():
     return [f for f in os.listdir(METRICS_SAVE_DIR) if f.endswith('_metrics.pkl')]
 
 def run_metric_computation(is_2d_input: bool):
-    try:
-        model = global_state.get("model")
-        dataloader = global_state.get("flattened_dataloader" if is_2d_input else "dataloader")
-        normalized_data = global_state.get("normalized_data") or global_state.get("converted_data")
+    # try:
+    model = global_state.get("model")
+    dataloader = global_state.get("flattened_dataloader" if is_2d_input else "dataloader")
+    normalized_data = global_state.get("normalized_data") or global_state.get("converted_data")
 
-        if model is None:
-            return append_log_visualizer("❌ Model not loaded.")
-        if dataloader is None:
-            return append_log_visualizer("❌ Dataloader not available.")
-        if normalized_data is None:
-            return append_log_visualizer("❌ Not available to build response data.")
-        
-        response_data = normalized_data.get("responses_test_by_trial")
+    if model is None:
+        return append_log_visualizer("❌ Model not loaded.")
+    if dataloader is None:
+        return append_log_visualizer("❌ Dataloader not available.")
+    if normalized_data is None:
+        return append_log_visualizer("❌ Not available to build response data.")
+    
+    response_data = normalized_data.get("responses_test_by_trial")
 
-        session_dict = dataloader.get("test")
-        if session_dict is None or not session_dict:
-            return append_log_visualizer("❌ Test set not found in dataloader.")
+    session_dict = dataloader.get("test")
+    if session_dict is None or not session_dict:
+        return append_log_visualizer("❌ Test set not found in dataloader.")
 
-        # test_std = global_state.get("std_dict", {}).get("images_test", 1.0)
-        test_std = 1.0
-        result = compute_evaluation_metrics(model, session_dict, response_data, is_2d=is_2d_input, test_std=test_std)
-        global_state["metrics"] = result
-        append_log_visualizer("Model Evaluation Results:")
-        append_log_visualizer(f"  MSE: {result['mse']:.4f}")
-        append_log_visualizer(f"  RMSE: {result['rmse']:.4f}")
-        append_log_visualizer(f"  Mean Correlation: {result['mean_correlation']:.4f}")
-        append_log_visualizer(f"  Median Correlation: {result['median_correlation']:.4f}")
-        if result.get("reliability") is not None:
-            append_log_visualizer(f"  Mean Fraction of Ceiling: {result['mean_fraction_of_ceiling']:.4f}")
-            append_log_visualizer(f"  Median Fraction of Ceiling: {result['median_fraction_of_ceiling']:.4f}")
-            append_log_visualizer(f"  Mean Corrected R2: {result['mean_corrected_r2']:.4f}")
-            append_log_visualizer(f"  Median Corrected R2: {result['median_corrected_r2']:.4f}")
-        return append_log_visualizer("✅ Metric computation complete.")
-    except Exception as e:
-        return append_log_visualizer(f"❌ Failed to compute metrics: {str(e)}")
+    # test_std = global_state.get("std_dict", {}).get("images_test", 1.0)
+    test_std = 1.0
+    result = compute_evaluation_metrics(model, session_dict, response_data, is_2d=is_2d_input, test_std=test_std)
+    global_state["metrics"] = result
+    append_log_visualizer("Model Evaluation Results:")
+    append_log_visualizer(f"  MSE: {result['mse']:.4f}")
+    append_log_visualizer(f"  RMSE: {result['rmse']:.4f}")
+    append_log_visualizer(f"  Mean Correlation: {result['mean_correlation']:.4f}")
+    append_log_visualizer(f"  Median Correlation: {result['median_correlation']:.4f}")
+    if result.get("reliability") is not None:
+        append_log_visualizer(f"  Mean Fraction of Ceiling: {result['mean_fraction_of_ceiling']:.4f}")
+        append_log_visualizer(f"  Median Fraction of Ceiling: {result['median_fraction_of_ceiling']:.4f}")
+        append_log_visualizer(f"  Mean Corrected R2: {result['mean_corrected_r2']:.4f}")
+        append_log_visualizer(f"  Median Corrected R2: {result['median_corrected_r2']:.4f}")
+    return append_log_visualizer("✅ Metric computation complete.")
+    # except Exception as e:
+    #     return append_log_visualizer(f"❌ Failed to compute metrics: {str(e)}")
 
 def draw_metrics_summary():
     metrics = global_state.get("metrics")

@@ -53,12 +53,36 @@ def step_load_raw(filename):
     except Exception as e:
         return append_log_dataio(f"❌ 数据读取失败: {str(e)}")
 
+def parse_index_string(index_string):
+    index_string = index_string.strip()
+    if not index_string:
+        cell_indexs = None
+    else:
+        cell_indexs = []
+        for part in index_string.split(','):
+            part = part.strip()
+            if '-' in part:
+                try:
+                    start, end = map(int, part.split('-'))
+                    cell_indexs.extend(range(start, end + 1))
+                except ValueError:
+                    continue
+            else:
+                try:
+                    i = int(part)
+                    cell_indexs.append(i)
+                except ValueError:
+                    continue
+        cell_indexs = sorted(set(cell_indexs))
+    return cell_indexs
+
 # Convert the raw data format
-def step_convert_format():
+def step_convert_format(indices=None):
     if global_state["raw_data"] is None:
         return append_log_dataio("❌ 请先读取数据")
     try:
-        converted = convert_format(global_state["raw_data"])
+        cell_indexs = parse_index_string(indices)
+        converted = convert_format(global_state["raw_data"], cell_indexs)
         global_state["converted_data"] = converted
         global_state["init_mask"] = converted.get("mask", None)
 
@@ -203,6 +227,10 @@ def build_dataio_ui():
     with gr.Row():
         dataset_dropdown = gr.Dropdown(choices=list_datasets(), label="Choose a dataset (.pkl)", interactive=True)
 
+    pick_indices = gr.Textbox(label="Cell indices (e.g. 0,1,2 or 0-3,5)",
+                                value="",
+                                placeholder="Leave blank to pick all")
+
     with gr.Row():
         b1 = gr.Button("Step 1: Raw Data Input")
         b2 = gr.Button("Step 2: Format Conversion")
@@ -227,7 +255,7 @@ def build_dataio_ui():
     output_dataio = gr.Textbox(label="Console", lines=10, max_lines=10, interactive=False, show_copy_button=True)
 
     b1.click(step_load_raw, inputs=dataset_dropdown, outputs=output_dataio)
-    b2.click(step_convert_format, outputs=output_dataio)
+    b2.click(step_convert_format, inputs=[pick_indices], outputs=output_dataio)
     b3.click(step_normalize, outputs=output_dataio)
     b4.click(step_prepare, inputs=[input_chunk, input_batch, input_seed, input_clip], outputs=output_dataio)
     b5.click(build_dataloader, outputs=output_dataio)
