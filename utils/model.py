@@ -177,7 +177,7 @@ class KlindtCoreWrapper2D(Core):
                 kernel_size=k_size,
                 stride=1,
                 padding=0,
-                bias=not batch_norm
+                # bias=not batch_norm
             )
 
             # nn.init.normal_(conv.weight, mean=init_scales[0][0], std=init_scales[0][1])
@@ -490,7 +490,7 @@ class KlindtCoreReadout2D(BaseCoreReadout):
         self.save_hyperparameters()
 
 # 后门函数
-def load_tf_weights_into_model(model, core_path, mask_path, readout_path):
+def load_tf_weights_into_model(model, core_path, mask_path, readout_path, frozen):
     core_tf = np.load(core_path)
     core_torch = core_tf.transpose(2, 0, 1)[..., np.newaxis]  # → (4, 31, 31, 1)
     core_torch = np.transpose(core_torch, (0, 3, 1, 2))       # → (4, 1, 31, 31)
@@ -509,20 +509,23 @@ def load_tf_weights_into_model(model, core_path, mask_path, readout_path):
     with torch.no_grad():
         # 注入 core 权重并冻结
         model.core.conv_layers[0].weight.copy_(core_tensor)
-        model.core.conv_layers[0].weight.requires_grad = False
+        if frozen:
+            model.core.conv_layers[0].weight.requires_grad = False
         print("Core weight insert complete and frozen")
 
         # 注入 mask 权重并冻结
         model.readout.mask_weights.copy_(mask_tensor)
-        model.readout.mask_weights.requires_grad = False
+        if frozen:
+            model.readout.mask_weights.requires_grad = False
         print("Mask weight insert complete and frozen")
 
         # 注入 readout 权重并冻结
         model.readout.readout_weights.copy_(readout_tensor)
-        model.readout.readout_weights.requires_grad = False
+        if frozen:
+            model.readout.readout_weights.requires_grad = False
         print("Readout weight insert complete and frozen")
 
 
-def backup(model):
-    load_tf_weights_into_model(model, "plots_ans/convolutional_kernels.npy", "plots_ans/spatial_masks.npy", "plots_ans/feature_weights.npy")
+def backup(model, frozen = True):
+    load_tf_weights_into_model(model, "plots_ans/convolutional_kernels.npy", "plots_ans/spatial_masks.npy", "plots_ans/feature_weights.npy", frozen)
     print("Backup complete")
