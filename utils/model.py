@@ -256,8 +256,6 @@ class KlindtCoreWrapper2D(Core):
             x = self.activation_layers[i](x)
             if self.bn_layers is not None:
                 x = self.bn_layers[i](x)
-            # if self.act_fns[i] == 'relu':
-                # x = F.relu(x)
             
         return x
 
@@ -501,6 +499,8 @@ def load_tf_weights_into_model(model, core_path, mask_path, readout_path, frozen
     if indices is not None:
         mask = mask[indices]
         num_neurons = len(indices)
+    else:
+        num_neurons = 41
     mask_flat = mask.reshape(num_neurons, -1).T  # shape: (6084, 41)
     mask_tensor = torch.tensor(mask_flat, dtype=torch.float32)
     print("mask.shape:", mask.shape)
