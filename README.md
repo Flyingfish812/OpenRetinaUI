@@ -73,3 +73,9 @@ LSTA plot optimized.
 - 2025/07/04
 
 Parameter search implemented
+
+## Version 0.3.1
+
+- 2025/07/11
+
+Response plot implemented

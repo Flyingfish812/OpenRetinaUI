@@ -17,6 +17,7 @@ from utils.visualizer import (
     plot_convolutional_kernels,
     plot_spatial_masks,
     plot_feature_weights,
+    plot_response_curves,
     fig_to_buffer
 )
 
@@ -232,6 +233,24 @@ def draw_feature_weights():
     image = fig_to_buffer(fig_list)
     return image, f"✅ Feature weights plot done."
 
+def draw_response_curves(indices):
+    metrics = global_state.get("metrics")
+    if metrics is None:
+        return [], "❌ No model available."
+    
+    predictions = metrics.get("predictions")
+    targets = metrics.get("targets")
+    cell_indexs = parse_index_string(indices)
+    fig_list = plot_response_curves(
+        predictions=predictions,
+        targets=targets,
+        cell_indices=cell_indexs
+    )
+
+    image = fig_to_buffer(fig_list)
+    # images = [fig_to_buffer(fig) for fig in fig_list]
+    return image, "✅ Response curves plot done."
+
 LSTA_DIR = os.path.join(APP_DIR, "data", "lsta")
 
 def list_lsta_files():
@@ -303,6 +322,15 @@ def build_visualizer_ui():
             grid_btn = gr.Button("Plot Grid Predictions")
             grid_imgs = gr.Gallery(label="Grid Prediction Plots", columns=4, height="auto", preview=False)
         status_box = gr.Textbox(label="Status", max_lines=1, interactive=False)
+        with gr.Column():
+            with gr.Row():
+                response_indices = gr.Textbox(label="Cell indices (e.g. 0,1,2 or 0-3,5)",
+                                          value="",
+                                          placeholder="Leave blank to plot all (may consume a lot of memory)")
+                response_btn = gr.Button("Plot Responses")
+            response_imgs = gr.Image(label="Response Plots", type="pil", interactive=False)
+        response_box = gr.Textbox(label="Response Status", max_lines=1, interactive=False)
+        response_btn.click(draw_response_curves, inputs=[response_indices], outputs=[response_imgs, response_box])
         
         gr.Markdown("## LSTA")
 
