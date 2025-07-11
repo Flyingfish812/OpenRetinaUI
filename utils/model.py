@@ -50,8 +50,14 @@ class L1Smooth2DRegularizer:
         self.sparsity_factor = sparsity_factor
         self.smoothness_factor = smoothness_factor
         self.padding_mode = padding_mode
-        self.center_mass_factor = center_mass_factor
         self.target_center = target_center
+
+        if isinstance(center_mass_factor, Iterable):
+            factors = list(center_mass_factor)
+            assert len(factors) == 3, "center_mass_factor must be float or iterable of 3 floats"
+            self.cm_center, self.cm_compact, self.cm_peak = factors
+        else:
+            self.cm_center = self.cm_compact = self.cm_peak = center_mass_factor
 
         # Laplacian kernel (3x3)
         self.registered_kernel = torch.tensor(
@@ -89,37 +95,32 @@ class L1Smooth2DRegularizer:
             reg += self.smoothness_factor * smoothness_reg
 
         # Center of mass regularization
-        if self.center_mass_factor > 0:
-            # Use sum-of-squares as "intensity"
-            norm_weights = weights.pow(2).sum(dim=1)  # [out_channels, H, W]
+        if any(f > 0 for f in [self.cm_center, self.cm_compact, self.cm_peak]):
+            norm_weights = weights.pow(2).sum(dim=1)  # [B, H, W]
             B, H, W = norm_weights.shape
 
             y = torch.linspace(0, 1, H, device=weights.device).view(1, H, 1)
             x = torch.linspace(0, 1, W, device=weights.device).view(1, 1, W)
 
-            # Normalize energy
             total = norm_weights.sum(dim=(1, 2), keepdim=True) + 1e-8
-            mass = norm_weights / total  # [B, H, W]
+            mass = norm_weights / total
 
-            # === 1. Center alignment ===
-            cy = (mass * y).sum(dim=(1, 2))  # [B]
-            cx = (mass * x).sum(dim=(1, 2))  # [B]
+            # --- Center deviation ---
+            cy = (mass * y).sum(dim=(1, 2))
+            cx = (mass * x).sum(dim=(1, 2))
             d_center = (cy - self.target_center[0]) ** 2 + (cx - self.target_center[1]) ** 2
-            center_reg = d_center.mean()
+            reg += self.cm_center * d_center.mean()
 
-            # === 2. Compactness via max distance from center ===
+            # --- Compactness ---
             dist2 = ((y - cy.view(-1, 1, 1)) ** 2 + (x - cx.view(-1, 1, 1)) ** 2)
-            compactness = (mass * dist2).sum(dim=(1, 2))  # [B]
-            compactness_reg = compactness.mean()
+            compactness = (mass * dist2).sum(dim=(1, 2))
+            reg += self.cm_compact * compactness.mean()
 
-            # === 3. Peak dominance penalty ===
-            max_val = norm_weights.view(B, -1).max(dim=1)[0]  # [B]
-            mean_val = norm_weights.view(B, -1).mean(dim=1)   # [B]
-            peakness = mean_val / (max_val + 1e-8)  # want this to be small
-            peakness_reg = peakness.mean()
-
-            # === Combine ===
-            reg += self.center_mass_factor * (center_reg + compactness_reg + peakness_reg)
+            # --- Peakness ---
+            max_val = norm_weights.view(B, -1).max(dim=1)[0]
+            mean_val = norm_weights.view(B, -1).mean(dim=1)
+            peak_ratio = mean_val / (max_val + 1e-8)
+            reg += self.cm_peak * peak_ratio.mean()
 
         return reg
 
@@ -405,7 +406,7 @@ class KlindtCoreReadout2D(BaseCoreReadout):
         init_scales: Iterable[Iterable[float]],  # 3x2 matrix: [kernel, mask, weights] x [mean, std]
         smothness_reg: float = 1e0,
         sparsity_reg: float = 1e-1,
-        center_mass_reg: float = 0,
+        center_mass_reg: float | Iterable[float] = 0,
         init_kernels: Optional[str] = None,
         kernel_constraint: Optional[str] = None,
         batch_norm: bool = True,
@@ -495,22 +496,32 @@ def load_tf_weights_into_model(model, core_path, mask_path, readout_path):
     core_torch = np.transpose(core_torch, (0, 3, 1, 2))       # → (4, 1, 31, 31)
     core_tensor = torch.tensor(core_torch, dtype=torch.float32)
     print("core_tensor.shape:", core_tensor.shape)
-    
+
     mask = torch.tensor(np.load(mask_path), dtype=torch.float32)
     mask_flat = mask.reshape(41, -1).T  # shape: (6084, 41)
     mask_tensor = torch.tensor(mask_flat, dtype=torch.float32)
     print("mask.shape:", mask.shape)
+
     readout = torch.tensor(np.load(readout_path), dtype=torch.float32)
     readout_tensor = readout.T  # shape: (6084, 41)
     print("readout.shape:", readout.shape)
 
     with torch.no_grad():
+        # 注入 core 权重并冻结
         model.core.conv_layers[0].weight.copy_(core_tensor)
-        print("Core weight insert complete")
+        model.core.conv_layers[0].weight.requires_grad = False
+        print("Core weight insert complete and frozen")
+
+        # 注入 mask 权重并冻结
         model.readout.mask_weights.copy_(mask_tensor)
-        print("Mask weight insert complete")
+        model.readout.mask_weights.requires_grad = False
+        print("Mask weight insert complete and frozen")
+
+        # 注入 readout 权重并冻结
         model.readout.readout_weights.copy_(readout_tensor)
-        print("Readout weight insert complete")
+        model.readout.readout_weights.requires_grad = False
+        print("Readout weight insert complete and frozen")
+
 
 def backup(model):
     load_tf_weights_into_model(model, "plots_ans/convolutional_kernels.npy", "plots_ans/spatial_masks.npy", "plots_ans/feature_weights.npy")
