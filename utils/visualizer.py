@@ -480,7 +480,7 @@ def plot_lsta(images, lsta_data, lsta_model, ellipses, image_indices, cell_index
 
             # === 模型 LSTA crop ===
             x0, x1, y0, y1 = get_crop_bounds(x108, y108, padding=10, shape_limit=108)
-            data = lsta_model[cell_idx, i, 0, y0:y1, x0:x1]
+            data = lsta_model[cell_idx, image_indices[i], 0, y0:y1, x0:x1]
             data = data ** 2 * np.sign(data)
             vmax = np.max([np.amax(data), -np.amin(data)]) * 0.75
             extent_model = [x0, x1, y1, y0]
