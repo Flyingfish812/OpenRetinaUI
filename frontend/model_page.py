@@ -2,6 +2,7 @@ import gradio as gr
 import numpy as np
 import os
 import torch
+import torch.nn as nn
 import yaml
 from torchinfo import summary
 from inspect import signature, _empty
