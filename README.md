@@ -79,3 +79,9 @@ Parameter search implemented
 - 2025/07/11
 
 Response plot implemented
+
+## Version 0.4.0
+
+- 2025/07/15
+
+We have rebuilt the code structure with a clear frontend part and backend part to make it easier to understand.
