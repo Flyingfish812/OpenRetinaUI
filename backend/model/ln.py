@@ -5,7 +5,7 @@ from openretina.modules.core.base_core import Core
 from openretina.modules.readout.base import Readout
 from openretina.models.core_readout import BaseCoreReadout
 from backend.model.activations import build_activation_layer
-from backend.model.losses_2d import CorrelationLoss2D
+from backend.model.losses_2d import build_loss_2d
 from backend.model.regularizers import L1Smooth2DRegularizer
 from typing import Iterable, Optional, Any
 
@@ -118,8 +118,10 @@ class LNCoreReadout2D(BaseCoreReadout):
         sparsity_factor: float = 1e-4,
         smoothness_factor: float = 1e-4,
         kernel_constraint: Optional[str] = 'maxnorm',
-        loss: Optional[nn.Module] = nn.PoissonNLLLoss(log_input=False),
-        correlation_loss: nn.Module | None = CorrelationLoss2D(),
+        # loss: Optional[nn.Module] = nn.PoissonNLLLoss(log_input=False),
+        # correlation_loss: nn.Module | None = CorrelationLoss2D(),
+        loss: Optional[str] = "poisson",
+        correlation_loss: Optional[str] = "correlation",
         learning_rate: float = 1e-4,
         data_info: Optional[dict] = None,
         seed: Optional[int] = None,
@@ -157,8 +159,8 @@ class LNCoreReadout2D(BaseCoreReadout):
             core=core,
             readout=readout,
             learning_rate=learning_rate,
-            loss=loss,
-            correlation_loss=correlation_loss,
+            loss=build_loss_2d(loss),
+            correlation_loss=build_loss_2d(correlation_loss),
             data_info=data_info
         )
 

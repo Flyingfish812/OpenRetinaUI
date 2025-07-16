@@ -1,7 +1,8 @@
 import os
 import gradio as gr
 from frontend import *
-from backend.utils import favicon_abs_path
+from backend.utils import global_state, favicon_abs_path
+from backend.model import backup
 
 def exit_app():
     os._exit(0)
@@ -46,7 +47,7 @@ with gr.Blocks(title="Open Retina UI", css=css) as demo:
             b_exit = gr.Button("Quit Application")
             b_exit.click(exit_app)
 
-        gr.HTML("<div id='custom-footer'>© 2025 Open Retina UI - Version 0.4.0 - Powered by Flyingfish812</div>")
+        gr.HTML("<div id='custom-footer'>© 2025 Open Retina UI - Version 0.4.1 - Powered by Flyingfish812</div>")
 
 if __name__ == "__main__":
     demo.launch(server_name="127.0.0.1", server_port=7860, inbrowser=True, favicon_path=favicon_abs_path)

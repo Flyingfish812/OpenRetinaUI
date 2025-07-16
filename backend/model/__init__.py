@@ -9,7 +9,8 @@ from .lnln import LNLNCoreReadout2D
 from .activations import build_activation_layer
 
 # ========= Losses and Regularizers =========
-from .losses_2d import CorrelationLoss2D, ZeroLoss
+from .losses_2d import build_loss_2d
+from .losses_3d import build_loss_3d
 from .regularizers import L1Smooth2DRegularizer
 
 # ========= Debugs =========
@@ -28,8 +29,8 @@ __all__ = [
     "build_activation_layer",
 
     # Losses and Regularizers
-    "CorrelationLoss2D",
-    "ZeroLoss",
+    "build_loss_2d",
+    "build_loss_3d",
     "L1Smooth2DRegularizer",
 
     # Debug

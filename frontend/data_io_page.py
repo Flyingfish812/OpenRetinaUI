@@ -47,11 +47,11 @@ def step_load_raw(filename):
         info.append(f"Image shape: {image_size}")
         info.append(f"Number of neurons: {num_neurons}")
 
-        info.append("✅ 数据读取成功")
+        info.append("✅ Data loaded successfully")
 
         return append_log_dataio("\n".join(info))
     except Exception as e:
-        return append_log_dataio(f"❌ 数据读取失败: {str(e)}")
+        return append_log_dataio(f"❌ Data load failed: {str(e)}")
 
 def parse_index_string(index_string):
     index_string = index_string.strip()
@@ -79,7 +79,7 @@ def parse_index_string(index_string):
 # Convert the raw data format
 def step_convert_format(indices=None):
     if global_state["raw_data"] is None:
-        return append_log_dataio("❌ 请先读取数据")
+        return append_log_dataio("❌ Please read the data first")
     try:
         cell_indexs = parse_index_string(indices)
         converted = convert_format(global_state["raw_data"], cell_indexs)
@@ -96,26 +96,26 @@ def step_convert_format(indices=None):
             info.append(f"Test responses with trail: {converted['responses_test_by_trial'].shape}")
         else:
             info.append(f"Test responses with trail: {converted.get('responses_test_by_trial', None)}")
-        info.append("✅ 格式转换成功")
+        info.append("✅ Format convert successfully")
         return append_log_dataio("\n".join(info))
     except Exception as e:
-        return append_log_dataio(f"❌ 格式转换失败: {str(e)}")
+        return append_log_dataio(f"❌ Format convert failed: {str(e)}")
 
 # Normalize the converted data
 def step_normalize():
     if global_state["converted_data"] is None:
-        return append_log_dataio("❌ 请先执行格式转换")
+        return append_log_dataio("❌ Please convert the format first")
     try:
         normalized, _, _ = normalize_data(global_state["converted_data"])
         global_state["normalized_data"] = normalized
-        return append_log_dataio("✅ Normalization 成功")
+        return append_log_dataio("✅ Normalization Success")
     except Exception as e:
-        return append_log_dataio(f"❌ Normalization 失败: {str(e)}")
+        return append_log_dataio(f"❌ Normalization failed: {str(e)}")
 
 # Merge data (train and validation)
 def step_prepare(train_chunk_size, batch_size, seed, clip_length):
     if global_state["converted_data"] is None:
-        return append_log_dataio("❌ 请先执行格式转换")
+        return append_log_dataio("❌ Please convert the format first")
     try:
         data = global_state.get("normalized_data") or global_state.get("converted_data")
         merged_data, metadata = prepare_data_and_metadata(
@@ -129,18 +129,18 @@ def step_prepare(train_chunk_size, batch_size, seed, clip_length):
         global_state["metadata"] = metadata
 
         info = []
-        info.append("✅ 成功生成并保存合并数据")
+        info.append("✅ Create and merge data successfully")
         for k, v in metadata.items():
             info.append(f"{k}: {v}")
 
         return append_log_dataio("\n".join(info))
     except Exception as e:
-        return append_log_dataio(f"❌ 合并失败: {str(e)}")
+        return append_log_dataio(f"❌ Merge failed: {str(e)}")
 
 # Build DataLoader from the merged data
 def build_dataloader():
     if global_state["merged_data"] is None:
-        return append_log_dataio("❌ 请先执行数据准备")
+        return append_log_dataio("❌ Please prepare the data first")
     try:
         merged_data = global_state["merged_data"]
         metadata = global_state["metadata"]
@@ -163,14 +163,14 @@ def build_dataloader():
             print_dataloader_info(test_loaders)
             printed_output = buf.getvalue()
 
-        return append_log_dataio(printed_output + "\n✅ DataLoader 构建成功")
+        return append_log_dataio(printed_output + "\n✅ DataLoader successfully built")
     except Exception as e:
-        return append_log_dataio(f"❌ 构建 DataLoader 失败: {str(e)}")
+        return append_log_dataio(f"❌ Build DataLoader failed: {str(e)}")
 
 # Optional: Flatten the DataLoader for 2D use
 def flatten_dataloader():
     if global_state["dataloader"] is None:
-        return append_log_dataio("❌ 请先构建 DataLoader")
+        return append_log_dataio("❌ Please build the DataLoader first")
     try:
         dataloader = global_state["dataloader"]
         flattened = strip_all_dataloaders(dataloader)
@@ -182,12 +182,12 @@ def flatten_dataloader():
             printed_output = buf.getvalue()
         return append_log_dataio(printed_output + "\n✅ DataLoader Flattened")
     except Exception as e:
-        return append_log_dataio(f"❌ 展平 DataLoader 失败: {str(e)}")
+        return append_log_dataio(f"❌ Flatten DataLoader failed: {str(e)}")
 
 # Save the DataLoader and metadata to files
 def save_metadata_and_dataloader(filename, save_flattened):
     if global_state["merged_data"] is None or global_state["metadata"] is None:
-        return append_log_dataio("❌ 请先执行数据准备")
+        return append_log_dataio("❌ Please prepare the data first")
     try:
         metadata = global_state["metadata"]
 
@@ -200,7 +200,7 @@ def save_metadata_and_dataloader(filename, save_flattened):
             suffix = "unflattened"
 
         if dataloader_to_save is None:
-            return append_log_dataio(f"❌ DataLoader ({suffix}) 不存在，请先构建")
+            return append_log_dataio(f"❌ DataLoader ({suffix}) does not exist, please build it first")
 
         base_name = filename.replace(".pkl", "")
         metadata_path = os.path.join(LOADER_DATA_DIR, f"{base_name}_metadata.pkl")
@@ -215,12 +215,12 @@ def save_metadata_and_dataloader(filename, save_flattened):
             loader_info = buf.getvalue()
 
         return append_log_dataio(
-            f"✅ 成功保存 DataLoader（{suffix}）至：{dataloader_path}\n"
-            f"✅ Metadata 保存至：{metadata_path}\n"
-            f"✅ DataLoader 结构信息：\n{loader_info}"
+            f"✅ Save DataLoader ({suffix}) to: {dataloader_path}\n"
+            f"✅ Metadata saved to: {metadata_path}\n"
+            f"✅ DataLoader structure: \n{loader_info}"
         )
     except Exception as e:
-        return append_log_dataio(f"❌ 备份失败: {str(e)}")
+        return append_log_dataio(f"❌ Save DataLoader failed: {str(e)}")
     
 def build_dataio_ui():
     gr.Markdown("# Pre-Processing Data I/O")

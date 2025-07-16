@@ -46,7 +46,7 @@ def read_and_print_dataloader_info(dataloader_filename: str):
             info = buf.getvalue()
         return append_log_dataloader(info + "\n✅ DataLoader loaded successfully")
     except Exception as e:
-        return append_log_dataloader(f"❌ 读取失败: {str(e)}")
+        return append_log_dataloader(f"❌ Read failed: {str(e)}")
     
 def build_dataloader_ui(demo: gr.Blocks):
     gr.Markdown("# Load and Check Existing Dataloader")

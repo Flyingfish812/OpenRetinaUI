@@ -85,3 +85,9 @@ Response plot implemented
 - 2025/07/15
 
 We have rebuilt the code structure with a clear frontend part and backend part to make it easier to understand.
+
+## Version 0.4.1
+
+- 2025/07/16
+
+Loss registration by string complete. YAML read/write fixed.

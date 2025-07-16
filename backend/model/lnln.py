@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.nn.init import constant_, xavier_uniform_
 from typing import Iterable, Optional, Any
 from backend.model.activations import build_activation_layer
-from backend.model.losses_2d import CorrelationLoss2D
+from backend.model.losses_2d import build_loss_2d
 from openretina.modules.core.base_core import Core
 from openretina.modules.readout.base import Readout
 from openretina.models.core_readout import BaseCoreReadout
@@ -132,8 +132,10 @@ class LNLNCoreReadout2D(BaseCoreReadout):
         core_bias: bool = False,
         readout_bias: bool = True,
         readout_activation: str = "parametric_softplus",
-        loss: nn.Module | None = nn.PoissonNLLLoss(log_input = False),
-        correlation_loss: nn.Module | None = CorrelationLoss2D(),
+        # loss: nn.Module | None = nn.PoissonNLLLoss(log_input = False),
+        # correlation_loss: nn.Module | None = CorrelationLoss2D(),
+        loss: Optional[str] = "poisson",
+        correlation_loss: Optional[str] = "correlation",
         data_info: dict = None,
         learning_rate: float = 1e-3,
     ):
@@ -170,8 +172,8 @@ class LNLNCoreReadout2D(BaseCoreReadout):
         super().__init__(
             core=core,
             readout=readout,
-            loss=loss,
-            correlation_loss=correlation_loss,
+            loss=build_loss_2d(loss),
+            correlation_loss=build_loss_2d(correlation_loss),
             data_info=data_info or {},
             learning_rate=learning_rate,
         )

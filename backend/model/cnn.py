@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 from typing import Iterable, Optional, Union, Any
 from backend.model.activations import build_activation_layer
-from backend.model.losses_2d import CorrelationLoss2D
+from backend.model.losses_2d import build_loss_2d
 from backend.model.regularizers import L1Smooth2DRegularizer
 from openretina.modules.core.base_core import Core
 from openretina.modules.readout.base import Readout
@@ -307,8 +307,10 @@ class KlindtCoreReadout2D(BaseCoreReadout):
         mask_reg: float = 1e-3,
         weights_reg: float = 1e-1,
         # Common parameters
-        loss: nn.Module | None = nn.PoissonNLLLoss(log_input = False),
-        correlation_loss: nn.Module | None = CorrelationLoss2D(),
+        # loss: nn.Module | None = nn.PoissonNLLLoss(log_input = False),
+        # correlation_loss: nn.Module | None = CorrelationLoss2D(),
+        loss: Optional[str] = "poisson",
+        correlation_loss: Optional[str] = "correlation",
         learning_rate: float = 0.01,
         data_info: Optional[dict[str, Any]] = None,
     ):
@@ -365,8 +367,8 @@ class KlindtCoreReadout2D(BaseCoreReadout):
             core=core,
             readout=readout,
             learning_rate=learning_rate,
-            loss=loss,
-            correlation_loss=correlation_loss,
+            loss=build_loss_2d(loss),
+            correlation_loss=build_loss_2d(correlation_loss),
             data_info=data_info,
         )
 

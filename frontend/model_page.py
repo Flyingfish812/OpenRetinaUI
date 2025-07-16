@@ -5,8 +5,7 @@ import torch
 import torch.nn as nn
 import yaml
 from torchinfo import summary
-from inspect import signature, _empty
-from typing import get_type_hints
+from frontend.utils import cast_value, quote_string_fields, extract_model_init_params
 from backend.utils import global_state, MODEL_SAVE_DIR
 from backend.model import *
 from openretina.models.core_readout import CoreReadout
@@ -28,44 +27,6 @@ log_messages_model = []
 def append_log_model(new_msg: str):
     log_messages_model.append(new_msg)
     return "\n".join(log_messages_model)
-
-def extract_model_init_params(model_class):
-    sig = signature(model_class.__init__)
-    type_hints = get_type_hints(model_class.__init__)
-    params = []
-    for name, param in sig.parameters.items():
-        if name == "self":
-            continue
-        ptype = type_hints.get(name, str)
-        default = param.default if param.default is not _empty else ""
-        params.append((name, ptype, default))
-    return params
-
-def cast_value(value, name, target_type):
-    try:
-        if value in ("None", "", None):
-            return None
-        if name == "init_mask":
-            if eval(value) is None:
-                return None
-            elif eval(value) == "default":
-                print("Using default init_mask")
-                return global_state.get("init_mask", None)
-        if target_type == int:
-            return int(value)
-        elif target_type == float:
-            return float(value)
-        elif target_type == bool:
-            return value.lower() in ["true", "1"]
-        elif target_type in [list, tuple] or str(target_type).startswith(("list", "tuple")):
-            result = eval(value, {"np": np})
-            return list(result) if isinstance(result, tuple) else result
-        elif "np.array" in value:
-            return eval(value, {"np": np})
-        else:
-            return eval(value)
-    except Exception as e:
-        raise ValueError(f"Parameter `{value}` cannot be cast to {target_type}: {e}")
 
 def render_param_fields(model_name, param_container, input_widgets, input_component_list):
     model_class = available_models[model_name]
@@ -99,39 +60,37 @@ def render_param_fields(model_name, param_container, input_widgets, input_compon
     return updates
 
 def trigger_build_model(*args, model_name, input_widgets):
-    # try:
-    model_class = available_models[model_name]
-    append_log_model(f"Model name: {model_name}, Model class: {model_class}")
-    params = extract_model_init_params(model_class)
-    typed_kwargs = {
-        name: cast_value(value, name, ptype)
-        for (name, ptype, _), value in zip(params, args)
-    }
-    append_log_model(f"\nBuilding models with following parameters: \n{typed_kwargs}")
-    model = model_class(**typed_kwargs)
-    global_state["model"] = model
-    global_state["model_settings"] = {"name": model_name, "args": typed_kwargs}
-    return append_log_model(f"\n✅ Model successfully built: \n{model}")
-    # except Exception as e:
-        # return append_log_model(f"\n❌ Fail to build model: {str(e)}")
-
-def fallback_representer(dumper, data):
-    return dumper.represent_scalar("!str", str(data))
-
+    try:
+        model_class = available_models[model_name]
+        append_log_model(f"Model name: {model_name}, Model class: {model_class}")
+        params = extract_model_init_params(model_class)
+        typed_kwargs = {
+            name: cast_value(value, name, ptype)
+            for (name, ptype, _), value in zip(params, args)
+        }
+        append_log_model(f"\nBuilding models with following parameters: \n{typed_kwargs}")
+        model = model_class(**typed_kwargs)
+        global_state["model"] = model
+        global_state["model_settings"] = {"name": model_name, "args": typed_kwargs}
+        return append_log_model(f"\n✅ Model successfully built: \n{model}")
+    except Exception as e:
+        return append_log_model(f"\n❌ Fail to build model: {str(e)}")
+    
+# YAML Read/Write
 def save_model_and_settings(filename):
-    yaml.SafeDumper.add_multi_representer(object, fallback_representer)
     try:
         model = global_state.get("model")
         settings = global_state.get("model_settings")
         if model is None or settings is None:
             return append_log_model("❌ Please build the model first")
 
-        # with open(os.path.join(MODEL_SAVE_DIR, f"{filename}_model.pkl"), "wb") as f:
-        #     pickle.dump(model, f)
         torch.save(model, os.path.join(MODEL_SAVE_DIR, f"{filename}_model.pth"))
 
+        # 强制加引号包裹字符串字段
+        quoted_settings = quote_string_fields(settings)
+
         with open(os.path.join(MODEL_SAVE_DIR, f"{filename}_settings.yaml"), "w") as f:
-            yaml.safe_dump(settings, f)
+            yaml.safe_dump(quoted_settings, f)
 
         return append_log_model(f"✅ Saved model to: {filename}_model.pth\nSetting parameters to: {filename}_settings.yaml")
     except Exception as e:
@@ -149,27 +108,27 @@ def load_settings_and_fill(settings_path, model_selector, param_container, input
                 append_log_model(f"❌ Model `{model_name}` in settings is not available in the model list")
             ]
 
-        # 重建参数控件
         render_param_fields(model_name, param_container, input_widgets, input_component_list)
 
-        # 构建输出更新列表
         model_selector_update = gr.update(value=model_name)
         param_updates = []
         params = extract_model_init_params(available_models[model_name])
+
         for i, (name, _, _) in enumerate(params):
             widget = input_widgets.get(name)
             if widget:
-                param_updates.append(gr.update(value=str(args.get(name, ""))))
+                v = args.get(name, "")
+                if isinstance(v, str) and not (v.startswith('"') or v.startswith("'")):
+                    v = f'"{v}"'  # 在界面中加引号，提示用户是字符串
+                param_updates.append(gr.update(value=str(v)))
             else:
                 param_updates.append(gr.update())
-        # 填满剩余控件
         for _ in range(len(params), MAX_PARAMS):
             param_updates.append(gr.update(visible=False))
 
         log_text = append_log_model(f"✅ Setting loaded successfully with model built: {model_name}")
 
         global_state["model_settings"] = args
-        # global_state["model"] = available_models[model_name](**args)
         global_state["model"] = torch.load(settings_path.replace("_settings.yaml", "_model.pth"), weights_only=False)
 
         return [model_selector_update] + param_updates + [log_text]
