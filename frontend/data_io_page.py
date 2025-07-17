@@ -12,7 +12,6 @@ from backend.dataio import (
     print_dataloader_info,
     strip_all_dataloaders
 )
-from pympler import asizeof
 from openretina.data_io.base_dataloader import multiple_movies_dataloaders
 from backend.utils import RAW_DATA_DIR, LOADER_DATA_DIR, global_state
 
@@ -174,8 +173,6 @@ def flatten_dataloader():
     try:
         dataloader = global_state["dataloader"]
         flattened = strip_all_dataloaders(dataloader)
-        append_log_dataio(str(asizeof.asizeof(dataloader)) + " bytes for unflattened DataLoader")
-        append_log_dataio(str(asizeof.asizeof(flattened)) + " bytes for flattened DataLoader")
         global_state["flattened_dataloader"] = flattened
         with io.StringIO() as buf, contextlib.redirect_stdout(buf):
             print_dataloader_info(flattened)

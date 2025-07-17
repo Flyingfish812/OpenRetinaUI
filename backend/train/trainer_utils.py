@@ -1,6 +1,7 @@
 import os
 import torch
 import datetime
+import types
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 
@@ -60,3 +61,16 @@ def configure_external_optimizers(model, factor = 0.5, patience = 25, threshold 
     }
 
     return {"optimizer": optimizer, "lr_scheduler": scheduler}
+
+def bind_configure_optimizers(model, config):
+    def configure_optimizers_fn(self):
+        return configure_external_optimizers(
+            self,
+            config["sr_factor"],
+            config["sr_patience"],
+            config["sr_threshold"],
+            config["sr_startlr"],
+            config["sr_minlr"]
+        )
+    # 绑定为实例方法
+    model.configure_optimizers = types.MethodType(configure_optimizers_fn, model)

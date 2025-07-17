@@ -146,6 +146,25 @@ def build_summary(input_size):
         return f"Model summary:\n" + summary_str
     except Exception as e:
         return f"Error generating model summary: {str(e)}"
+    
+def save_state_dict(filename):
+    model = global_state.get("model")
+    if model is None:
+        return append_log_model("❌ No model found.")
+    torch.save(model.state_dict(), os.path.join(MODEL_SAVE_DIR, f"{filename}_weights.pth"))
+    return append_log_model(f"✅ State dict saved as {filename}_weights.pth")
+
+def load_state_dict_only(filename):
+    model = global_state.get("model")
+    if model is None:
+        return append_log_model("❌ Please build the model structure first before loading weights.")
+    path = os.path.join(MODEL_SAVE_DIR, filename)
+    try:
+        model.load_state_dict(torch.load(path))
+        return append_log_model(f"✅ Loaded weights from {filename}")
+    except Exception as e:
+        return append_log_model(f"❌ Failed to load weights: {str(e)}")
+
 
 def build_model_instance_ui():
     with gr.Blocks() as model_ui:
@@ -196,6 +215,26 @@ def build_model_instance_ui():
             inputs=[save_name],
             outputs=output_log
         )
+
+        # 添加新组件
+        with gr.Column():
+            gr.Markdown("## Advanced: Export or Import Model Weights Only")
+
+            with gr.Row():
+                weight_save_name = gr.Textbox(label="Save Weights As", placeholder="ex. my_model")
+                save_weights_btn = gr.Button("Save State Dict")
+
+            weight_files = gr.Dropdown(
+                label="Load Weights File",
+                choices=[f for f in os.listdir(MODEL_SAVE_DIR) if f.endswith("_weights.pth")],
+                interactive=True
+            )
+            load_weights_btn = gr.Button("Load Weights")
+
+        # 绑定函数
+        save_weights_btn.click(fn=save_state_dict, inputs=[weight_save_name], outputs=[output_log])
+        load_weights_btn.click(fn=load_state_dict_only, inputs=[weight_files], outputs=[output_log])
+
 
         # 初始化参数控件
         init_updates = render_param_fields(model_selector.value, param_container, input_widgets, input_component_list)

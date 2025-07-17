@@ -6,7 +6,8 @@ from backend.train.trainer_utils import (
     create_early_stopping,
     create_lr_monitor,
     create_checkpoint,
-    configure_external_optimizers
+    bind_configure_optimizers
+    # configure_external_optimizers
 )
 from lightning.pytorch import Trainer
 from openretina.data_io.cyclers import LongCycler, ShortCycler
@@ -37,14 +38,15 @@ def trigger_train_from_config(config: dict):
     val_loader = ShortCycler(dataloader["validation"])
 
     model = global_state["model"]
-    model.configure_optimizers = lambda: configure_external_optimizers(
-        model,
-        config["sr_factor"],
-        config["sr_patience"],
-        config["sr_threshold"],
-        config["sr_startlr"],
-        config["sr_minlr"]
-    )
+    # model.configure_optimizers = lambda: configure_external_optimizers(
+    #     model,
+    #     config["sr_factor"],
+    #     config["sr_patience"],
+    #     config["sr_threshold"],
+    #     config["sr_startlr"],
+    #     config["sr_minlr"]
+    # )
+    bind_configure_optimizers(model, config)
 
     global_state["training_logs"] = []
     trainer.fit(model, train_loader, val_loader)

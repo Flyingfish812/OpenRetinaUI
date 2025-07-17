@@ -1,4 +1,3 @@
-import re
 from typing import Iterable, Union
 import torch
 import torch.nn as nn

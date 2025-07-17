@@ -91,3 +91,9 @@ We have rebuilt the code structure with a clear frontend part and backend part t
 - 2025/07/16
 
 Loss registration by string complete. YAML read/write fixed.
+
+## Version 0.4.2
+
+- 2025/07/17
+
+pyproject implemented.
