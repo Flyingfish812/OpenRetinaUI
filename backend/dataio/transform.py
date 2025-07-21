@@ -83,7 +83,12 @@ def normalize_data(
         arr = arr.astype(np.float32)
 
         if mode == "None":
-            normalized[key] = arr
+            if key == "responses_test_by_trial":
+                mean_resp = arr.mean(axis=2)  # [T, N]
+                normalized[key] = arr
+                normalized["responses_test"] = mean_resp.T.astype(np.float32)
+            else:
+                normalized[key] = arr
 
         elif mode == "Normalize by total":
             # 图像：按通道归一化
