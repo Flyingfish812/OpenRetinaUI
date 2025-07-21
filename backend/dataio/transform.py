@@ -57,7 +57,10 @@ def convert_format(data: dict, neuron_indices: Optional[list] = None) -> dict:
 
     return converted
 
-def normalize_data(data: dict) -> Tuple[dict, dict, dict]:
+def normalize_data(
+    data: dict,
+    mode: str = "None"
+) -> Tuple[dict, dict, dict]:
     """
     Normalization:
     - Image: [C, B, H, W], normalize each channel (C) independently
@@ -76,81 +79,102 @@ def normalize_data(data: dict) -> Tuple[dict, dict, dict]:
     mean_dict: Dict[str, np.ndarray] = {}
     std_dict: Dict[str, np.ndarray] = {}
 
-    for key, value in data.items():
-        arr = value.astype(np.float32)
+    for key, arr in data.items():
+        arr = arr.astype(np.float32)
 
-        # 图像数据处理（按通道归一化）
-        if key.startswith("images_") and arr.ndim == 4:
-            C, B, H, W = arr.shape
-            # normed = np.empty_like(arr, dtype=np.float32)
-            # means = np.zeros(C, dtype=np.float32)
-            # stds = np.ones(C, dtype=np.float32)
-            # for c in range(C):
-            #     mean = arr[c].mean()
-            #     std = arr[c].std()
-            #     std = std if std > 1e-6 else 1.0
-            #     normed[c] = (arr[c] - mean) / std
-            #     means[c] = mean
-            #     stds[c] = std
-            # normalized[key] = normed
-            # mean_dict[key] = means
-            # std_dict[key] = stds
-
-            # means = arr.mean()
-            # std = arr.std(ddof=1)
-            # normalized[key] = (arr - means) / std
-            # mean_dict[key] = means
-            # std_dict[key] = std
-
+        if mode == "None":
             normalized[key] = arr
 
-        # 响应数据处理（整体归一化）
-        elif key.startswith("responses_") and arr.ndim == 2:
-            # Per-dimension std
-            # std = arr.std(axis=1, keepdims=True, ddof=1)
-            # mean_std = std.mean()
-            # std[std < (mean_std / 100)] = 1.0
+        elif mode == "Normalize by total":
+            # 图像：按通道归一化
+            if key.startswith("images_") and arr.ndim == 4:
+                C, B, H, W = arr.shape
+                flat = arr.reshape(C, -1)  # [C, B*H*W]
+                means = flat.mean(axis=1)  # [C]
+                stds = flat.std(axis=1)
+                stds = np.where(stds > 1e-6, stds, 1.0)
+                normed = (arr - means[:, None, None, None]) / stds[:, None, None, None]
+                normalized[key] = normed
+                mean_dict[key] = means
+                std_dict[key] = stds
 
-            # # Clamp to positive and normalize
-            # arr = np.clip(arr, a_min=0, a_max=None)
-            # normalized[key] = (arr / std).astype(np.float32)
+            # 响应：按神经元归一化
+            elif key.startswith("responses_") and arr.ndim == 2:
+                N, B = arr.shape
+                means = arr.mean(axis=1)  # [N]
+                stds = arr.std(axis=1)
+                stds = np.where(stds > 1e-6, stds, 1.0)
+                normed = (arr - means[:, None]) / stds[:, None]
+                normalized[key] = normed
+                mean_dict[key] = means
+                std_dict[key] = stds
 
-            # mean_dict[key] = np.zeros_like(std, dtype=np.float32)  # 不减 mean
-            # std_dict[key] = std.astype(np.float32)
+            # 多 trial 测试响应
+            elif key == "responses_test_by_trial":
+                T, N, R = arr.shape
+                flat = arr.transpose(1, 0, 2).reshape(N, -1)  # [N, T*R]
+                means = flat.mean(axis=1)
+                stds = flat.std(axis=1)
+                stds = np.where(stds > 1e-6, stds, 1.0)
+                normed = (arr - means[None, :, None]) / stds[None, :, None]
+                normalized[key] = normed
+                # 平均后生成 responses_test
+                mean_resp = normed.mean(axis=2)  # [T,N]
+                normalized["responses_test"] = mean_resp.T.astype(np.float32)
+                mean_dict[key] = means
+                std_dict[key] = stds
 
-            normalized[key] = arr
+            else:
+                normalized[key] = arr
 
-        elif key == "responses_test_by_trial":
-            # [T, N, trial]
-            # arr = arr.astype(np.float32)
-            # # T, N, R = arr.shape
+        elif mode == "Normalize by Frame":
+            # 图像：每帧单独归一化
+            if key.startswith("images_") and arr.ndim == 4:
+                C, B, H, W = arr.shape
+                reshaped = arr.transpose(1, 0, 2, 3).reshape(B, -1)  # [B, C*H*W]
+                means = reshaped.mean(axis=1)  # [B]
+                stds = reshaped.std(axis=1)
+                stds = np.where(stds > 1e-6, stds, 1.0)
+                normed = (arr - means[None, :, None, None]) / stds[None, :, None, None]
+                normalized[key] = normed
+                mean_dict[key] = means
+                std_dict[key] = stds
 
-            # # Step 1: Clamp to positive
-            # arr = np.clip(arr, a_min=0, a_max=None)
+            # 响应：每时刻单独归一化
+            elif key.startswith("responses_") and arr.ndim == 2:
+                N, B = arr.shape
+                means = arr.mean(axis=0)  # [B]
+                stds = arr.std(axis=0)
+                stds = np.where(stds > 1e-6, stds, 1.0)
+                normed = (arr - means[None, :]) / stds[None, :]
+                normalized[key] = normed
+                mean_dict[key] = means
+                std_dict[key] = stds
 
-            # # Step 2: Normalize across trials (each trial treated independently)
-            # std = arr.std(axis=2, keepdims=True, ddof=1)  # shape: [T, N]
-            # mean_std = std.mean()
-            # std[std < (mean_std / 100)] = 1.0
+            # 多 trial 测试响应
+            elif key == "responses_test_by_trial":
+                T, N, R = arr.shape
+                flat = arr.transpose(2, 0, 1).reshape(R * T, -1)  # [R*T, N]
+                means = flat.mean(axis=1)  # [R*T]
+                stds = flat.std(axis=1)
+                stds = np.where(stds > 1e-6, stds, 1.0)
+                # 回写归一化
+                normed = np.empty_like(arr, dtype=np.float32)
+                for t in range(T):
+                    for r in range(R):
+                        idx = r * T + t
+                        normed[t, :, r] = (arr[t, :, r] - means[idx]) / stds[idx]
+                normalized[key] = normed
+                mean_resp = normed.mean(axis=2)  # [T,N]
+                normalized["responses_test"] = mean_resp.T.astype(np.float32)
+                mean_dict[key] = means
+                std_dict[key] = stds
 
-            # arr_norm = arr / std  # shape [T, N, trial]
+            else:
+                normalized[key] = arr
 
-            # normalized[key] = arr_norm.astype(np.float32)
-
-            # # Step 3: After normalization, compute mean across trials → [T, N]
-            # mean_resp = arr_norm.mean(axis=2)  # → [T, N]
-            # normalized["responses_test"] = mean_resp.T.astype(np.float32)  # [N, T]
-
-            # mean_dict["responses_test"] = np.zeros_like(std.T, dtype=np.float32)
-            # std_dict["responses_test"] = std.T.astype(np.float32)
-
-            mean_resp = arr.mean(axis=2)  # [T, N]
-            normalized[key] = arr
-            normalized["responses_test"] = mean_resp.T.astype(np.float32)
-
-        # 其他数据直接保留
         else:
-            normalized[key] = arr
+            raise ValueError(f"Invalid normalization mode: {mode}")
 
     return normalized, mean_dict, std_dict
 

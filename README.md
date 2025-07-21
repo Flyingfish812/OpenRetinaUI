@@ -96,4 +96,4 @@ Loss registration by string complete. YAML read/write fixed.
 
 - 2025/07/17
 
-pyproject implemented.
+Pyproject implemented. Data normalization mode enabled.

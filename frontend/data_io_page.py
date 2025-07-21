@@ -101,11 +101,11 @@ def step_convert_format(indices=None):
         return append_log_dataio(f"❌ Format convert failed: {str(e)}")
 
 # Normalize the converted data
-def step_normalize():
+def step_normalize(mode="None"):
     if global_state["converted_data"] is None:
         return append_log_dataio("❌ Please convert the format first")
     try:
-        normalized, _, _ = normalize_data(global_state["converted_data"])
+        normalized, _, _ = normalize_data(global_state["converted_data"], mode)
         global_state["normalized_data"] = normalized
         return append_log_dataio("✅ Normalization Success")
     except Exception as e:
@@ -231,6 +231,14 @@ def build_dataio_ui():
     with gr.Row():
         b1 = gr.Button("Step 1: Raw Data Input")
         b2 = gr.Button("Step 2: Format Conversion")
+
+    # 新增：归一化模式选择
+    with gr.Row():
+        norm_mode = gr.Dropdown(
+            choices=["None", "Normalize by total", "Normalize by Frame"],
+            value="None",
+            label="Normalization Mode"
+        )
         b3 = gr.Button("Step 3: Normalization")
 
     with gr.Row():
@@ -253,7 +261,7 @@ def build_dataio_ui():
 
     b1.click(step_load_raw, inputs=dataset_dropdown, outputs=output_dataio)
     b2.click(step_convert_format, inputs=[pick_indices], outputs=output_dataio)
-    b3.click(step_normalize, outputs=output_dataio)
+    b3.click(step_normalize, inputs=[norm_mode], outputs=output_dataio)
     b4.click(step_prepare, inputs=[input_chunk, input_batch, input_seed, input_clip], outputs=output_dataio)
     b5.click(build_dataloader, outputs=output_dataio)
     b6.click(flatten_dataloader, outputs=output_dataio)
