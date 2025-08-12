@@ -90,6 +90,7 @@ def save_yaml_unified(model_name, config_data):
 # 执行搜索
 def launch_search_unified(model_name, input_2d, n_trials, eval_metric, config_data):
     try:
+        rows = config_data.values.tolist() if hasattr(config_data, 'values') else config_data
         append_log(f"[INFO] Start searching {n_trials} trials using {model_name}...")
         model_class = get_available_model_classes()[model_name]
         dataloader = global_state.get('flattened_dataloader') if input_2d else global_state.get('dataloader')
@@ -99,7 +100,7 @@ def launch_search_unified(model_name, input_2d, n_trials, eval_metric, config_da
         trial_config = {}
         params = extract_model_init_params(model_class)
         type_map = {n: t for n, t, _ in params}
-        for row in config_data:
+        for row in rows:
             name, value, search_flag, method, args_str = row
             if not name:
                 continue

@@ -13,12 +13,10 @@ from openretina.models.core_readout import BaseCoreReadout
 class KlindtCoreWrapper2D(Core):
     def __init__(
         self,
-        # image_size: int,
         image_channels: int,
         kernel_sizes: Iterable[int | Iterable[int]],
         num_kernels: Iterable[int],
         act_fns: Iterable[str],
-        # reg: Iterable[float],
         smothness_reg: float,
         sparsity_reg: float,
         center_mass_reg: float,
@@ -70,7 +68,7 @@ class KlindtCoreWrapper2D(Core):
             if init_kernels.startswith("gaussian"):
                 with torch.no_grad():
                     weight = conv.weight  # shape: [out_channels, in_channels, H, W]
-                    out_c, in_c, H, W = weight.shape
+                    _, _, H, W = weight.shape
 
                     # 解析 sigma 参数
                     try:
@@ -106,7 +104,6 @@ class KlindtCoreWrapper2D(Core):
                     conv.weight.data = conv.weight.data / norm
 
             self.conv_layers.append(conv)
-
             if self.bn_layers is not None:
                 self.bn_layers.append(
                     nn.BatchNorm2d(
@@ -117,7 +114,6 @@ class KlindtCoreWrapper2D(Core):
                     )
                 )
             input_channels = k_num
-
             self.activation_layers.append(build_activation_layer(act_fn))
         
         self.regularizer_module = L1Smooth2DRegularizer(
@@ -156,7 +152,6 @@ class KlindtReadoutWrapper2D(Readout):
         self,
         num_kernels: Iterable[int],
         num_neurons: int,
-        # reg: Iterable[float],
         mask_reg: float,
         weights_reg: float,
         mask_size: int | Iterable[int], # int or (h,w)
