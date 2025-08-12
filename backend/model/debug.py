@@ -1,4 +1,5 @@
 import torch
+import yaml
 import numpy as np
 
 # Backup functions
@@ -52,3 +53,15 @@ def backup(model, frozen = True, indices=None):
                                frozen, 
                                indices)
     print("Backup complete")
+
+def get_kwargs_from_yaml(yaml_path):
+    def unquote_once(x):
+        if isinstance(x, str) and len(x) >= 2 and x[0] == x[-1] and x[0] in ("'", '"'):
+            return x[1:-1]
+        return x
+    
+    with open(yaml_path, 'r') as file:
+        data = yaml.safe_load(file)
+    args = data.get("args", {})
+    kwargs = {k: unquote_once(v) for k, v in args.items()}
+    return kwargs

@@ -14,7 +14,7 @@ from .losses_3d import build_loss_3d
 from .regularizers import L1Smooth2DRegularizer
 
 # ========= Debugs =========
-from .debug import backup
+from .debug import backup, get_kwargs_from_yaml
 
 # ========= All Interfaces =========
 __all__ = [
@@ -35,4 +35,5 @@ __all__ = [
 
     # Debug
     "backup"
+    "get_kwargs_from_yaml"
 ]
