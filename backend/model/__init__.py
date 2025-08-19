@@ -34,6 +34,6 @@ __all__ = [
     "L1Smooth2DRegularizer",
 
     # Debug
-    "backup"
+    "backup",
     "get_kwargs_from_yaml"
 ]
